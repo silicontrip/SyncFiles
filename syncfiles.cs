@@ -114,6 +114,7 @@ namespace SyncPath
         }
         private string path;
 
+        [Alias("Destination")]
         [Parameter(Mandatory = true, Position = 1)]
         public string Target
         {
@@ -451,7 +452,7 @@ namespace SyncPath
                                 catch (Exception e)
                                 {
 
-                                  //  WriteWarning("CHECK : " + file + " : " + e.Message);
+                                    WriteDebug("CHECK : " + file + " : " + e.GetType().ToString() +" : " + e.Message);
 
                                     // could be a destination not exist
 
