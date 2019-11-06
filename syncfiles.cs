@@ -39,7 +39,6 @@ namespace SyncPath
             {
                 relativePath = relativePath.Replace(System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.DirectorySeparatorChar);
             }
-            // WriteDebug(String.Format("MakeRelativePath {0} -> {1} = {2}\n", fromPath, toPath, relativePath));
 
             return relativePath;
         }
@@ -156,6 +155,14 @@ namespace SyncPath
         private PSSession fromsession;
 
         [Parameter()]
+        public PSCredential Credential
+        {
+            get { return credential; }
+            set { credential = value; }
+        }
+        private PSCredential credential;
+
+        [Parameter()]
         public string[] Exclude
         {
             get { return excludeList; }
@@ -171,34 +178,15 @@ namespace SyncPath
         }
         private string[] includeList;
 
-
         // Override the ProcessRecord method to process
         // the supplied user name and write out a
         // greeting to the user by calling the WriteObject
         // method.
         protected override void ProcessRecord()
         {
-
             Collection<string> filelist;
             try
             {
-                if (fromsession != null)
-                {
-                    src = new RemoteIO(fromsession);
-                }
-                else
-                {
-                    src = new LocalIO(this.SessionState);
-                }
-
-                if (tosession != null)
-                {
-                    dst = new RemoteIO(tosession);
-                }
-                else
-                {
-                    dst = new LocalIO(this.SessionState);
-                }
 
                // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
 
@@ -206,26 +194,132 @@ namespace SyncPath
                 string abssrc;
                 string absdst;
 
+                // this decision tree is getting a bit large
+
                 // also check for UNC paths
                 if (!path.Contains(":\\") && !(path.StartsWith("\\\\")))
                 {
+                    if (fromsession != null)
+                    {
+                        src = new RemoteIO(fromsession);
+                    }
+                    else
+                    {
+                        src = new LocalIO(this.SessionState);
+                    }
+                    // relative path
                     abssrc = System.IO.Path.Combine(src.GetCwd(), path);
+                    // cannot have unc relative paths
                 }
                 else
                 {
+                    if (path.StartsWith("\\\\"))
+                    {
+                        if (credential != null) {
+                            if (fromsession != null)
+                            {
+                                // but maybe we're supplying credentials for the destination? check dst UNC abs path
+                                if (target.StartsWith("\\\\") && ToSession == null)
+                                    { src = new RemoteIO(fromsession); }
+                                else
+                                {
+                                    WriteDebug("only local unc paths...");
+                                    throw new ArgumentException("Only Local UNC Paths can have Credentials");
+                                }
+                            }
+                            else
+                            {
+                                src = new LocalIO(this.SessionState, credential, path);
+                            }
+                        } else {
+                            if (fromsession != null)
+                            {
+                                src = new RemoteIO(fromsession);
+                            }
+                            else
+                            {
+                                src = new LocalIO(this.SessionState);
+                            }
+                        }
+                    } else
+                    {
+                        if (fromsession != null)
+                        {
+                            src = new RemoteIO(fromsession);
+                        }
+                        else
+                        {
+                            src = new LocalIO(this.SessionState);
+                        }
+                    }
                     abssrc = path;
                 }
 
+                // I can't do a remote session authentication (maybe yet)
+
+
                 if (!target.Contains(":\\") && !(target.StartsWith("\\\\")))
                 {
+                    if (tosession != null)
+                    {
+                        dst = new RemoteIO(tosession);
+                    }
+                    else
+                    {
+                        dst = new LocalIO(this.SessionState);
+                    }
                     string dstcwd = dst.GetCwd();
                     WriteDebug("Dst cwd:" + dstcwd);
                     absdst = System.IO.Path.Combine(dstcwd, target);
                 }
                 else
                 {
+                    if (target.StartsWith("\\\\"))
+                    {
+                        if (credential != null)
+                        {
+                            if (tosession != null)
+                            {
+                                if (path.StartsWith("\\\\") && FromSession == null)
+                                {
+                                    dst = new RemoteIO(tosession);
+                                }
+                                else
+                                {
+                                    throw new ArgumentException("Only Local UNC Paths can have Credentials");
+                                }
+                            }
+                            else
+                            {
+                                dst = new LocalIO(this.SessionState, credential, path);
+                            }
+                        } else
+                        {
+                            if (tosession != null)
+                            {
+                                dst = new RemoteIO(tosession);
+                            }
+                            else
+                            {
+                                dst = new LocalIO(this.SessionState);
+                            }
+                        }
+                    } else
+                    {
+                        if (tosession != null)
+                        {
+                            dst = new RemoteIO(tosession);
+                        }
+                        else
+                        {
+                            dst = new LocalIO(this.SessionState);
+                        }
+                    }
+
                     absdst = target;
                 }
+
+                WriteDebug("SOURCE: " + abssrc);
 
                 SyncStat srcType = src.GetInfo(abssrc);
                 if (!srcType.Exists)
@@ -264,6 +358,9 @@ namespace SyncPath
                 else
                 {
                     filelist = new Collection<string> { abssrc };
+                    abssrc = System.IO.Path.GetDirectoryName(abssrc);
+                    if (!abssrc.EndsWith("\\")) abssrc += "\\";
+
                 }
                 // Determine if src is file or dir
 
@@ -309,6 +406,8 @@ namespace SyncPath
                         try
                         {
                             string relfile = MakeRelativePath(abssrc, file);
+                            WriteDebug(String.Format("MakeRelativePath {0} -> {1} = {2}\n", file, abssrc, relfile));
+
                             string dstfile = System.IO.Path.Combine(absdst, relfile);
 
                             SyncStat srcInfo = src.GetInfo(file);  // may throw

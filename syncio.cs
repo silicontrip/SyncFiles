@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using System.Runtime.InteropServices;
+using System.Security;
 
 namespace SyncPath
 {
@@ -26,8 +29,91 @@ namespace SyncPath
     {
         public readonly static int g_blocksize = 1048576;
         private SessionState session;
+        private String remoteUNC = null;
 
         public LocalIO (SessionState ss) { this.session = ss; }
+        public LocalIO (SessionState ss, PSCredential pc, String unc) { 
+            this.session = ss;
+            this.remoteUNC = unc;
+            
+            ConnectToRemote(unc, pc.UserName, SecureStringToString(pc.Password));
+        }
+
+        ~LocalIO ()
+        {
+            if (remoteUNC != null)
+            {
+                DisconnectRemote(remoteUNC);
+            }
+        }
+
+        [DllImport("Mpr.dll")]
+        private static extern int WNetUseConnection(
+            IntPtr hwndOwner,
+            NETRESOURCE lpNetResource,
+            string lpPassword,
+            string lpUserID,
+            int dwFlags,
+            string lpAccessName,
+            string lpBufferSize,
+            string lpResult
+        );
+
+        [DllImport("Mpr.dll")]
+        private static extern int WNetCancelConnection2(
+            string lpName,
+            int dwFlags,
+            bool fForce
+        );
+
+        [StructLayout(LayoutKind.Sequential)]
+        private class NETRESOURCE
+        {
+            public int dwScope = 0;
+            public int dwType = 0;
+            public int dwDisplayType = 0;
+            public int dwUsage = 0;
+            public string lpLocalName = "";
+            public string lpRemoteName = "";
+            public string lpComment = "";
+            public string lpProvider = "";
+        }
+
+        private static String SecureStringToString(SecureString value)
+        {
+            IntPtr valuePtr = IntPtr.Zero;
+            try
+            {
+                valuePtr = Marshal.SecureStringToGlobalAllocUnicode(value);
+                return Marshal.PtrToStringUni(valuePtr);
+            }
+            finally
+            {
+                Marshal.ZeroFreeGlobalAllocUnicode(valuePtr);
+            }
+        }
+
+        private static void ConnectToRemote(string remoteUNC, string username, string password)
+        {
+            NETRESOURCE nr = new NETRESOURCE();
+            nr.dwType = 1; // DISK RESOURCE
+            nr.lpRemoteName = remoteUNC;
+            //			nr.lpLocalName = "F:";
+
+            int ret;
+          
+                ret = WNetUseConnection(IntPtr.Zero, nr, password, username, 0, null, null, null);
+
+            if (ret != 0)
+                throw new Win32Exception(ret);
+        }
+
+        private static void DisconnectRemote(string remoteUNC)
+        {
+            int ret = WNetCancelConnection2(remoteUNC, 1, false); // CONNECT_UPDATE_PROFILE
+            if (ret != 0)
+                throw new Win32Exception(ret);
+        }
 
         public string GetCwd() { return session.Path.CurrentFileSystemLocation.ToString(); } 
       /*
@@ -158,7 +244,7 @@ namespace SyncPath
 
             // Console.WriteLine("file: " + p + " Block: " + block);
 
-            using (FileStream fs = System.IO.File.Open(p, System.IO.FileMode.Open))
+            using (FileStream fs = System.IO.File.Open(p, System.IO.FileMode.Open,FileAccess.Read,FileShare.ReadWrite))
             {
                 Int64 bloffset = block * g_blocksize;
                 //   Console.WriteLine("seek " + bloffset);
