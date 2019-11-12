@@ -252,11 +252,11 @@ namespace SyncPath
                             src = new LocalIO(this.SessionState);
                         }
                     }
-                    abssrc = path;
+                    // ProviderInfo pi;
+                    abssrc = GetUnresolvedProviderPathFromPSPath(path);
                 }
 
                 // I can't do a remote session authentication (maybe yet)
-
 
                 if (!target.Contains(":\\") && !(target.StartsWith("\\\\")))
                 {
@@ -316,7 +316,7 @@ namespace SyncPath
                         }
                     }
 
-                    absdst = target;
+                    absdst = GetUnresolvedProviderPathFromPSPath(target);
                 }
 
                 WriteDebug("SOURCE: " + abssrc);
