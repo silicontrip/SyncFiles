@@ -288,12 +288,15 @@ namespace SyncPath
         public string GetCwd()
         {
             Pipeline pipe = session.Runspace.CreatePipeline();
+            //pipe.Commands.AddScript("resolve-path ~");
             pipe.Commands.AddScript("get-location");
             Collection<PSObject> rv = pipe.Invoke();
             pipe.Dispose();
             foreach (PSObject ps in rv)
             {
-                return ps.BaseObject.ToString();
+               // Console.WriteLine( "cwd: " + ps.ToString());
+
+                return ps.ToString();
             }
             throw new System.IO.DirectoryNotFoundException();
         }

@@ -268,7 +268,12 @@ namespace SyncPath
                     {
                         dst = new LocalIO(this.SessionState);
                     }
+
                     string dstcwd = dst.GetCwd();
+                    if (dstcwd.Length == 0)
+                    {
+                        throw new DirectoryNotFoundException("Cannot get destination CWD");
+                    }
                     WriteDebug("Dst cwd:" + dstcwd);
                     absdst = System.IO.Path.Combine(dstcwd, target);
                 }
@@ -582,6 +587,7 @@ namespace SyncPath
                                 }
                             }
                             //optional sync attributes and dates
+
                             dst.SetInfo(dstfile, srcInfo);
                             // copy acl 
                         }
