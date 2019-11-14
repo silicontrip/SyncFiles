@@ -139,6 +139,14 @@ namespace SyncPath
         private Boolean progress;
 
         [Parameter()]
+        public SwitchParameter Delete
+        {
+            get { return delete; }
+            set { delete = value; }
+        }
+        private Boolean delete;
+
+        [Parameter()]
         public PSSession ToSession
         {
             get { return tosession; }
@@ -185,6 +193,7 @@ namespace SyncPath
         protected override void ProcessRecord()
         {
             Collection<string> filelist;
+            ProgressRecord prog = null;
             try
             {
 
@@ -333,6 +342,7 @@ namespace SyncPath
                 if (srcType.isDir())
                 {
                     if (!abssrc.EndsWith("\\")) abssrc += "\\";
+                    if (!absdst.EndsWith("\\")) absdst += "\\";
 
                     try
                     {
@@ -344,8 +354,55 @@ namespace SyncPath
                         }
                         else
                         {
-                            WriteVerbose("SKIPPING " + absdst);
+                            WriteVerbose("Target Dir Exists " + absdst);
                             WriteDebug("Directory exists");
+                            // check for delete
+                            if (delete)
+                            {
+                                WriteDebug("will delete");
+                                Collection<string> dstfilelist = dst.ReadDir(absdst);
+                                for (int i =dstfilelist.Count-1; i>=0; i--)
+                              //  foreach (string file in dstfilelist)
+                                {
+                                    string file = dstfilelist[i];
+                                    if (progress)
+                                        prog = new ProgressRecord(1, file, "Deleting");
+                                    string srcfile="";
+                                    string relfile = "";
+                                    string dstfile = "";
+                                    try
+                                    {
+                                         relfile = MakeRelativePath(absdst, file);
+                                       // WriteDebug(String.Format("MakeRelativePath {0} -> {1} = {2}\n", file, absdst, relfile));
+
+                                        srcfile = System.IO.Path.Combine(abssrc, relfile);
+                                        dstfile = System.IO.Path.Combine(absdst, relfile);
+                                        SyncStat sss = src.GetInfo(srcfile); // throws if not found
+                                        /*
+                                        if (!sss.Exists)
+                                        {
+                                            WriteVerbose("Deleting: " + relfile);
+                                            WriteDebug("abs :" + dstfile);
+                                            dst.Delete(dstfile);
+                                        }
+                                        */
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        // must delete files first.
+                                        WriteVerbose("Deleting: " + relfile);
+                                        WriteDebug("abs :" + dstfile);
+                                        try
+                                        {
+                                            dst.Delete(dstfile);
+                                        } catch (Exception ex)
+                                        {
+                                            WriteDebug("Cannot delete: " + ex.ToString());
+                                        }
+                                        WriteDebug("file not found: " + srcfile + " : " + e.ToString());
+                                    }
+                                }
+                            }
                         }
                     }
                     catch (Exception e) // remote throws different exception to local
@@ -376,7 +433,7 @@ namespace SyncPath
                 WriteDebug(String.Format("Arguments {0} -> {1}\n", abssrc, absdst));
 
 
-                ProgressRecord prog=null;
+
                 if (progress)
                     prog = new ProgressRecord(1, abssrc, "Copying");
 

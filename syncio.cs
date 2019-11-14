@@ -22,6 +22,8 @@ namespace SyncPath
         string HashBlock(string p, Int64 block); // file handle
         string HashTotal(string p);
 
+        void Delete(string p);
+
         string GetCwd();
     };
 
@@ -274,6 +276,17 @@ namespace SyncPath
                 return result;
             }
         }
+
+        public void Delete (string p)
+        {
+            FileAttributes fa = System.IO.File.GetAttributes(p);
+
+            if ((fa & FileAttributes.Directory) == FileAttributes.Directory)
+                System.IO.Directory.Delete(p);
+            else
+                System.IO.File.Delete(p);
+        }
+
     }
 
     public class RemoteIO : IO
@@ -295,7 +308,6 @@ namespace SyncPath
             foreach (PSObject ps in rv)
             {
                // Console.WriteLine( "cwd: " + ps.ToString());
-
                 return ps.ToString();
             }
             throw new System.IO.DirectoryNotFoundException();
@@ -546,6 +558,19 @@ namespace SyncPath
             pipe.Dispose();
 
         }
+
+        public void Delete(string p)
+        {
+            Pipeline pipe = session.Runspace.CreatePipeline();
+
+            string format = "remove-item -force \"{0}\""; // Force for hidden files
+            string command = string.Format(format, p);
+            pipe.Commands.AddScript(command);
+
+            pipe.Invoke();
+            pipe.Dispose();
+        }
+
         public string HashBlock(string p, Int64 block)
         {
             string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::Open)";
