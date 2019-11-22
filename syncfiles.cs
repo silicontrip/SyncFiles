@@ -206,7 +206,8 @@ namespace SyncPath
                 // this decision tree is getting a bit large
 
                 // also check for UNC paths
-                if (!path.Contains(":\\") && !(path.StartsWith("\\\\")))
+               // if (!path.Contains(":\\") && !(path.StartsWith("\\\\")))
+                if (!System.IO.Path.IsPathRooted(path))
                 {
                     if (fromsession != null)
                     {
@@ -267,7 +268,8 @@ namespace SyncPath
 
                 // I can't do a remote session authentication (maybe yet)
 
-                if (!target.Contains(":\\") && !(target.StartsWith("\\\\")))
+                //if (!target.Contains(":\\") && !(target.StartsWith("\\\\")))
+                if (!System.IO.Path.IsPathRooted(target))
                 {
                     if (tosession != null)
                     {
