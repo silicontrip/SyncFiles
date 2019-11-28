@@ -52,5 +52,7 @@ namespace SyncPath
         }
 
         public bool isDir() { return ((this.Attributes & FileAttributes.Directory) == FileAttributes.Directory); }
+        public bool isReparsePoint() { return ((this.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint); }
+
     }
 }

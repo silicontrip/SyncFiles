@@ -52,6 +52,10 @@ namespace SyncPath
             Byte[] b;
 
             SyncStat srcInfo = src.GetInfo(srcFile);
+
+            // check for reparse point.
+
+
             SyncStat dstInfo;
             try
             {
@@ -69,7 +73,15 @@ namespace SyncPath
                 if (dstInfo.Exists)
                 {
                     // doesn't look very clever to me
-                    string srcHash = src.HashBlock(srcFile, block);  // we should worry if this throws an error
+                    string srcHash;
+                    try
+                    {
+                        srcHash = src.HashBlock(srcFile, block);  // we should worry if this throws an error
+                    } catch (Exception e)
+                    {
+                        // uh oh
+                        throw (new IOException("Unable to read Source", e));
+                    }
                     try { 
                         string dstHash = dst.HashBlock(dstFile, block); 
                         if (srcHash.Equals(dstHash)) copyBlock = false;
@@ -80,8 +92,16 @@ namespace SyncPath
                 WriteDebug("will copy block: " + copyBlock);
                 if (copyBlock)
                 {
-                    b = src.ReadBlock(srcFile, block); // throw error report file failure
-                    dst.WriteBlock(dstFile, block, b);
+                 //   try
+                  //  {
+                        b = src.ReadBlock(srcFile, block); // throw error report file failure
+                        dst.WriteBlock(dstFile, block, b);
+                   // } catch (Exception e)
+                   // {
+                    //    WriteWarning("Copy Error: " + srcFile + " -> " + dstFile);
+                    //    WriteWarning("Attributes: " + srcInfo.Attributes);
+                    //    throw new IOException("Error Copying File",e);
+                   // }
                 }
                 if (bytesxfered + LocalIO.g_blocksize > srcInfo.Length)
                     bytesxfered = srcInfo.Length;
@@ -339,7 +359,7 @@ namespace SyncPath
                 if (!srcType.Exists)
                     throw (new System.IO.FileNotFoundException()); // fatal error, goodbye
 
-                if (srcType.isDir())
+                 if (srcType.isDir())
                 {
                     if (!abssrc.EndsWith("\\")) abssrc += "\\";
                     if (!absdst.EndsWith("\\")) absdst += "\\";
@@ -474,6 +494,10 @@ namespace SyncPath
 
                             SyncStat srcInfo = src.GetInfo(file);  // may throw
                             // sometimes getting nulls
+                            if (srcInfo.isReparsePoint())
+                            { 
+                                // TODO: copy reparse point to dst
+                            } else
                             if (srcInfo.isDir())
                             {
                                 WriteDebug(String.Format("src isDir: {0}", file));
@@ -646,12 +670,12 @@ namespace SyncPath
                             //optional sync attributes and dates
 
                             dst.SetInfo(dstfile, srcInfo);
-                            // copy acl 
+                            // TODO: copy acl 
                         }
                         catch (Exception e)
                         {
-                            //WriteWarning("FAILED : " + file + " : " + e.Message);
-                            // WriteVerbose(e.StackTrace);
+                           WriteWarning("" + file + " : " + e.Message);
+                          WriteWarning(e.StackTrace);
                             ErrorRecord er = new ErrorRecord(e, "FileCopy", ErrorCategory.ReadError, null);
                             WriteError(er);
                         }

@@ -21,34 +21,39 @@ namespace SyncPath
         void WriteBlock(string p, Int64 block, byte[] data); // file handle?
         string HashBlock(string p, Int64 block); // file handle
         string HashTotal(string p);
-
         void Delete(string p);
-
         string GetCwd();
+
+        Collection<string> GetDirs(string p);
+        Collection<string> GetFiles(string p);
+        Collection<string> ExpandPath(string p);
+
     };
+
 
     public class LocalIO : IO
     {
         public readonly static int g_blocksize = 1048576;
         private SessionState session;
-        private String remoteUNC = null;
+       // private String remoteUNC = null;
 
         public LocalIO (SessionState ss) { this.session = ss; }
         public LocalIO (SessionState ss, PSCredential pc, String unc) { 
             this.session = ss;
-            this.remoteUNC = unc;
+           // this.remoteUNC = unc;
             
-            ConnectToRemote(unc, pc.UserName, SecureStringToString(pc.Password));
+           // ConnectToRemote(unc, pc.UserName, SecureStringToString(pc.Password));
         }
 
         ~LocalIO ()
         {
-            if (remoteUNC != null)
-            {
-                DisconnectRemote(remoteUNC);
-            }
+          //  if (remoteUNC != null)
+          //  {
+          //      DisconnectRemote(remoteUNC);
+          //  }
         }
 
+        /*
         [DllImport("Mpr.dll")]
         private static extern int WNetUseConnection(
             IntPtr hwndOwner,
@@ -80,7 +85,7 @@ namespace SyncPath
             public string lpComment = "";
             public string lpProvider = "";
         }
-
+        */
         private static String SecureStringToString(SecureString value)
         {
             IntPtr valuePtr = IntPtr.Zero;
@@ -94,7 +99,7 @@ namespace SyncPath
                 Marshal.ZeroFreeGlobalAllocUnicode(valuePtr);
             }
         }
-
+        /*
         private static void ConnectToRemote(string remoteUNC, string username, string password)
         {
             NETRESOURCE nr = new NETRESOURCE();
@@ -109,22 +114,17 @@ namespace SyncPath
             if (ret != 0)
                 throw new Win32Exception(ret);
         }
-
+        */
+        /*
         private static void DisconnectRemote(string remoteUNC)
         {
             int ret = WNetCancelConnection2(remoteUNC, 1, false); // CONNECT_UPDATE_PROFILE
             if (ret != 0)
                 throw new Win32Exception(ret);
         }
-
-        public string GetCwd() { return session.Path.CurrentFileSystemLocation.ToString(); } 
-      /*
-        public Collection<string> ReadDir(string p)
-        {
-            string[] entry = System.IO.Directory.GetFileSystemEntries(p, "*", System.IO.SearchOption.AllDirectories);
-            return new Collection<string>(entry);
-        }
         */
+        public string GetCwd() { return session.Path.CurrentFileSystemLocation.ToString(); } 
+
         // because get all directories recursively may explode if it encounters a permission denied and return NOTHING.
         public Collection<string> ReadDir(string p)
         {
@@ -152,6 +152,48 @@ namespace SyncPath
                 }
             }
             return new Collection<string>(fl);
+        }
+
+        public Collection<string> GetDirs(string p)
+        {
+            string[] fl = Directory.GetDirectories(p);
+            return new Collection<string>(fl);
+        }
+
+        public Collection<string> GetFiles(string p)
+        {
+            string[] fl = Directory.GetFiles(p);
+            return new Collection<string>(fl);
+        }
+
+        public Collection<string> ExpandPath(string p)
+        {
+            // determine if relative or absolute path
+            if (!Path.IsPathRooted(p))
+            {
+                string cur = session.Path.CurrentFileSystemLocation.ToString();
+                p = Path.Combine(cur, p);
+            }
+
+          //  Console.WriteLine("path: " + p);
+
+            string path = Path.GetDirectoryName(p);
+            string card = Path.GetFileName(p);
+
+
+            
+           // Console.WriteLine("dir: " + path + " card: " + card);
+
+            Collection<string> pathList = new Collection<string>();
+            foreach (string pt in Directory.EnumerateFileSystemEntries(path, card))
+            {
+                pathList.Add(pt);
+            }
+
+            if (card.Length == 0)
+                pathList.Add(p);
+
+            return pathList;
         }
 
         public void MakeDir(string p)
@@ -183,10 +225,26 @@ namespace SyncPath
             FileSystemInfo pfi = new FileInfo(p);
             if ((f.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
                 pfi = new DirectoryInfo(p);
-
-            pfi.Attributes = f.Attributes;
-            pfi.CreationTimeUtc = f.CreationTimeUtc;
-            pfi.LastWriteTimeUtc = f.LastWriteTimeUtc;
+           
+                pfi.Attributes = f.Attributes;
+                pfi.CreationTimeUtc = f.CreationTimeUtc;
+            try { 
+                pfi.LastWriteTimeUtc = f.LastWriteTimeUtc;
+            }
+            catch (Exception e)
+            {
+                // ocassionally we get the incorrect time from f.LastWriteTimeUtc
+                // which causes set lastWriteTime to fail
+                // hopefully this is not too important
+                // May want to print a warning...?
+              //  throw new IOException("Cannot set LastWriteTime");
+                /*
+                Console.WriteLine(e.StackTrace);
+                Console.WriteLine("Attributes: " + f.Attributes);
+                Console.WriteLine("Create: " + f.CreationTimeUtc);
+                Console.WriteLine("Modify: " + f.LastWriteTimeUtc);
+                */
+            }
 
         }
 
@@ -289,6 +347,8 @@ namespace SyncPath
 
     }
 
+
+
     public class RemoteIO : IO
     {
         public readonly static int g_blocksize = 1048576;
@@ -312,22 +372,6 @@ namespace SyncPath
             }
             throw new System.IO.DirectoryNotFoundException();
         }
-        /*
-        public Collection<string> ReadDir(string p)
-        {
-            string format = "[System.IO.Directory]::GetFileSystemEntries(\"{0}\",\"*\",[System.IO.Searchoption]::AllDirectories)";
-            string command = string.Format(format, p);
-
-            Pipeline pipe = session.Runspace.CreatePipeline();
-            pipe.Commands.AddScript(command);
-            Collection<PSObject> rv = pipe.Invoke();
-            Collection<string> ret = new Collection<string>();
-
-            foreach (PSObject ps in rv) { ret.Add(ps.ToString()); }
-            pipe.Dispose();
-            return ret;
-        }
-        */
 
         public Collection<string> ReadDir(string p)
         {
@@ -360,9 +404,41 @@ namespace SyncPath
             return ret;
         }
 
+        public Collection<string> GetDirs(string p)
+        {
+            string format = @"[IO.Directory]::GetDirectories(""{0}"")";
+
+            string command = string.Format(format, p);
+
+            Pipeline pipe = session.Runspace.CreatePipeline();
+            pipe.Commands.AddScript(command);
+            Collection<PSObject> rv = pipe.Invoke();
+            Collection<string> ret = new Collection<string>();
+
+            foreach (PSObject ps in rv) { ret.Add(ps.ToString()); }
+            pipe.Dispose();
+            return ret;
+        }
+
+        public Collection<string> GetFiles(string p)
+        {
+            string format = @"[IO.Directory]::GetFiles(""{0}"")";
+
+            string command = string.Format(format, p);
+
+            Pipeline pipe = session.Runspace.CreatePipeline();
+            pipe.Commands.AddScript(command);
+            Collection<PSObject> rv = pipe.Invoke();
+            Collection<string> ret = new Collection<string>();
+
+            foreach (PSObject ps in rv) { ret.Add(ps.ToString()); }
+            pipe.Dispose();
+            return ret;
+        }
+
         public void MakeDir(string p)
         {
-            string format = "[System.IO.Directory]::CreateDirectory(\"{0}\")";
+            string format = @"[System.IO.Directory]::CreateDirectory(""{0}"")";
             string command = string.Format(format, p);
             Pipeline pipe = session.Runspace.CreatePipeline();
 
@@ -372,12 +448,33 @@ namespace SyncPath
 
         }
 
+        public Collection<string> ExpandPath (string p)
+        {
+            string f = @"resolve-path ""{0}""";
+            string command = string.Format(f, p);
+            Pipeline pipe = session.Runspace.CreatePipeline();
+            pipe.Commands.AddScript(command);
+
+            Collection<PSObject> res = pipe.Invoke();
+            pipe.Dispose();
+            Collection<string> pathList = new Collection<string>();
+            foreach (PSObject ps in res)
+            {
+                pathList.Add(ps.ToString());               
+            }
+
+            return pathList;
+
+            // no items
+           // throw new System.IO.FileLoadException();
+        }
+
         public SyncStat GetInfo(string p)
         {
 
             Pipeline pipe = session.Runspace.CreatePipeline();
 
-            string format = "get-item -force \"{0}\""; // Force for hidden files
+            string format = @"get-item -force ""{0}"""; // Force for hidden files
             string command = string.Format(format, p);
 
             // Console.WriteLine("getinfo: "+ command);
@@ -423,32 +520,26 @@ namespace SyncPath
             pipe.Invoke();
             pipe.Dispose();
 
-            /*
-                        format = "$f=get-item -force \"{0}\"";
-                        string command = string.Format(format, p);
-                        // Console.WriteLine("setinfo: " + command);
-                        pipe.Commands.AddScript(command);
-
-
-                        format = "$f.CreationTimeUtc=[System.DateTime]::FromFileTimeUtc(\"{0}\")";
-                        pipe.Commands.AddScript(string.Format(format, f.CreationTimeUtc.ToFileTimeUtc()));
-
-                        format = "$f.LastWriteTimeUtc=[System.DateTime]::FromFileTimeUtc(\"{0}\")";
-
-                        pipe.Commands.AddScript(string.Format(format, f.LastWriteTimeUtc.ToFileTimeUtc()));
-
-                        // not sure but some permissions appear to prevent access to the file time
-                        format = "$f.Attributes=\"{0}\"";
-                        pipe.Commands.AddScript(string.Format(format, f.Attributes));
-                        */
-
-
         }
 
         public string HashTotal(string p)
         {
             Pipeline pipe = session.Runspace.CreatePipeline();
 
+            string f = @"
+                $fs=[System.IO.file]::OpenRead(""{0}"")
+                $sha=[system.security.cryptography.sha256]::Create()
+                $h=$sha.computehash($fs)
+                $sha.Dispose()
+                $fs.Close()
+                $h
+            ";
+
+            string command = string.Format(f, p);
+
+            pipe.Commands.AddScript(command);
+
+            /*
             string format = "$fs=[System.IO.file]::OpenRead(\"{0}\")";
             string command = string.Format(format, p);
 
@@ -459,6 +550,7 @@ namespace SyncPath
             pipe.Commands.AddScript("$sha.Dispose()");
             pipe.Commands.AddScript("$fs.Close()");
             pipe.Commands.AddScript("$h");
+            */
 
             Collection<PSObject> res = pipe.Invoke();
             string result = "";
@@ -479,13 +571,30 @@ namespace SyncPath
 
             // Console.WriteLine("file: " + p + " block: " + block);
 
-            string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)";
-            string command = string.Format(format, p);
-            Pipeline pipe = session.Runspace.CreatePipeline();
+            Int64 bloffset = block * g_blocksize;
 
+            string f = @"
+                $fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)
+                $fs.Seek({1},[System.IO.SeekOrigin]::Begin)
+                $b= New-Object System.byte[] {2}
+                $r=$fs.read($b,0,{2})
+                [System.Array]::Resize([ref]$b,$r)
+                $bs=[Convert]::ToBase64String($b)
+                $fs.close()
+                $bs
+            ";
+
+            string command = string.Format(f,
+                p,
+                bloffset,
+                g_blocksize);
+
+            Pipeline pipe = session.Runspace.CreatePipeline();
             pipe.Commands.AddScript(command);
 
-            Int64 bloffset = block * g_blocksize;
+            /*
+            string format = @"$fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)";
+            string command = string.Format(format, p);
 
             string format2 = "$fs.Seek({0},[System.IO.SeekOrigin]::Begin)";
             string command2 = string.Format(format2, bloffset);
@@ -507,7 +616,7 @@ namespace SyncPath
             pipe.Commands.AddScript("$bs=[Convert]::ToBase64String($b)");
             pipe.Commands.AddScript("$fs.close()");
             pipe.Commands.AddScript("$bs");
-
+            */
 
             Collection<PSObject> res = pipe.Invoke();
             foreach (PSObject ps in res)
