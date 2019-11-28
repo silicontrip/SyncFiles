@@ -50,6 +50,15 @@ namespace DirectoryUsage
         }
         private Boolean all;
 
+        [Alias("h")]
+        [Parameter()]
+        public SwitchParameter HumanReadable
+        {
+               get { return humanreadable; }
+            set { humanreadable = value;  }
+        }
+        private Boolean humanreadable;
+
         [Parameter()]
         public int MaxDepth
         {
@@ -74,6 +83,7 @@ namespace DirectoryUsage
         }
         private Boolean seperatedir;
 
+        [Alias("s")]
         [Parameter()]
         public SwitchParameter Summarize
         {
@@ -82,6 +92,7 @@ namespace DirectoryUsage
         }
         private Boolean summarize;
 
+        [Alias("m")]
         [Parameter()]
         public SwitchParameter Mega
         {
@@ -89,6 +100,7 @@ namespace DirectoryUsage
             set { blocksize = 1048576; }
         }
 
+        [Alias("k")]
         [Parameter()]
         public SwitchParameter Kilo
         {
@@ -107,9 +119,35 @@ namespace DirectoryUsage
         {
             PSObject o = new PSObject();
 
+            string human = @"switch($this.Length) { { $_ -gt 1tb } 
+                        { ""{ 0:n2}T"" -f ($_ / 1tb) ; break }
+                    { $_ -gt 1gb }
+                        { ""{0:n2}G"" -f ($_ / 1gb) ; break }
+                    { $_ -gt 1mb }
+                        { ""{0:n2}M"" -f ($_ / 1mb) ; break }
+                    { $_ -gt 1kb }
+                        { ""{0:n2}K"" -f ($_ / 1Kb) ; break }
+                    default
+                        { ""{0}"" -f $_}
+                } 
+            ";
 
+            // string h2 = @" { ""full"" } ";
             string[] props = { "Length", "FullName" };
-            PSPropertySet ps = new PSPropertySet("DefaultDisplayPropertySet", props);
+            string[] propsh = { "ReadableLength", "FullName" };
+
+            ScriptBlock sb = ScriptBlock.Create(human);
+            PSScriptProperty psp = new PSScriptProperty("ReadableLength", sb);
+            PSPropertySet ps;
+            if (humanreadable)
+            {
+                ps = new PSPropertySet("DefaultDisplayPropertySet", propsh);
+            } else
+            {
+                ps = new PSPropertySet("DefaultDisplayPropertySet", props);
+
+            }
+
             PSMemberSet pm = new PSMemberSet("PSStandardMembers", new PSMemberInfo[] { ps });
            // pm.Members.Add();
 
@@ -117,6 +155,8 @@ namespace DirectoryUsage
 
             o.Properties.Add(new PSNoteProperty("Length",sz));
             o.Properties.Add(new PSNoteProperty("FullName",p));
+            o.Members.Add(psp);
+
             WriteObject(o);
         }
 
