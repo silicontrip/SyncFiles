@@ -575,7 +575,7 @@ namespace SyncPath
 
             string f = @"
                 $fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)
-                $fs.Seek({1},[System.IO.SeekOrigin]::Begin)
+                $fs.Seek({1},[System.IO.SeekOrigin]::Begin) > $null
                 $b= New-Object System.byte[] {2}
                 $r=$fs.read($b,0,{2})
                 [System.Array]::Resize([ref]$b,$r)
