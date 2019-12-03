@@ -705,14 +705,27 @@ namespace SyncPath
 
         public string HashBlock(string p, Int64 block)
         {
-            string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::Open)";
-            string command = string.Format(format, p);
+
+            string format = @"$fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open)
+            $r=$fs.Seek({1},[System.IO.SeekOrigin]::Begin)
+            $b=[System.byte[]]::new({2})
+            $r=$fs.read($b,0,{2})
+            $fs.close()
+            if ($r -eq 0) { throw ""EndOfFile""}
+            $sha=[system.security.cryptography.sha256]::Create()
+            $sha.computehash($b,0,$r)
+            $sha.dispose()
+            ";
+            // string format = "$fs =[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::Open)";
+
+            Int64 bloffset = block * g_blocksize;
+
+            string command = string.Format(format, p,bloffset,g_blocksize);
             Pipeline pipe = session.Runspace.CreatePipeline();
 
             pipe.Commands.AddScript(command);
 
-            Int64 bloffset = block * g_blocksize;
-
+            /*
             string format2 = "$r=$fs.Seek({0},[System.IO.SeekOrigin]::Begin)";
             string command2 = string.Format(format2, bloffset);
             pipe.Commands.AddScript(command2);
@@ -738,6 +751,7 @@ namespace SyncPath
             pipe.Commands.AddScript("$fs.close()");
             pipe.Commands.AddScript("$h");
 
+            */
             Collection<PSObject> res = pipe.Invoke();
             string result = "";
 
