@@ -674,8 +674,8 @@ namespace SyncPath
                         }
                         catch (Exception e)
                         {
-                           WriteWarning("" + file + " : " + e.Message);
-                          WriteWarning(e.StackTrace);
+                         //  WriteWarning("" + file + " : " + e.Message);
+                         // WriteWarning(e.StackTrace);
                             ErrorRecord er = new ErrorRecord(e, "FileCopy", ErrorCategory.ReadError, null);
                             WriteError(er);
                         }

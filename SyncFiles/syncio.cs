@@ -226,13 +226,18 @@ namespace SyncPath
             if ((f.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
                 pfi = new DirectoryInfo(p);
            
-                pfi.Attributes = f.Attributes;
                 pfi.CreationTimeUtc = f.CreationTimeUtc;
-            try { 
-                pfi.LastWriteTimeUtc = f.LastWriteTimeUtc;
+            pfi.LastWriteTimeUtc = f.LastWriteTimeUtc;
+
+            pfi.Attributes = f.Attributes; // it appears that you can no longer set the times on a file if the read only bit is set even though we set it.
+/*
+            try
+            { 
+               
             }
             catch (Exception e)
             {
+            */
                 // ocassionally we get the incorrect time from f.LastWriteTimeUtc
                 // which causes set lastWriteTime to fail
                 // hopefully this is not too important
@@ -244,7 +249,7 @@ namespace SyncPath
                 Console.WriteLine("Create: " + f.CreationTimeUtc);
                 Console.WriteLine("Modify: " + f.LastWriteTimeUtc);
                 */
-            }
+//            }
 
         }
 
@@ -282,6 +287,7 @@ namespace SyncPath
 
         public void WriteBlock(string p, Int64 block, byte[] data)
         {
+            // change permissions to allow writing.
             using (FileStream fs = System.IO.File.Open(p, System.IO.FileMode.OpenOrCreate))
             {
                 Int64 bloffset = block * g_blocksize;
@@ -634,7 +640,23 @@ namespace SyncPath
         {
             Pipeline pipe = session.Runspace.CreatePipeline();
 
-            string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::OpenOrCreate)";
+            string format = @"$fs=[IO.file]::Open(""{0}"",[IO.FileMode]::OpenOrCreate)
+            $r=$fs.Seek({1},[IO.SeekOrigin]::Begin)
+            $b=[Convert]::FromBase64String(""{2}"")
+            $fs.write($b,0,$b.Length)
+            $fs.SetLength(""{3}"")
+            $fs.close()
+            ";
+
+            Int64 bloffset = block * g_blocksize;
+            string b64data = System.Convert.ToBase64String(data);
+
+            string command = string.Format(format, p, bloffset, b64data, bloffset + data.Length);
+
+            pipe.Commands.AddScript(command);
+
+            /*
+            string format = "$fs =[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::OpenOrCreate)";
             string command = string.Format(format, p);
 
             pipe.Commands.AddScript(command);
@@ -663,6 +685,7 @@ namespace SyncPath
             //Collection<PSObject> bytesres = pipe.Invoke();
             //pipe.Commands.AddScript("$b");
             // Collection<PSObject> res = 
+            */
             pipe.Invoke();
             pipe.Dispose();
 
