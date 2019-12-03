@@ -142,7 +142,7 @@ namespace SyncPath
                     foreach (string fe in tfl)
                     {
                         FileAttributes fa = File.GetAttributes(fe);
-                        if ((fa & FileAttributes.Directory) != 0)
+                        if ((fa & FileAttributes.Directory) != 0 && (fa & FileAttributes.ReparsePoint) == 0)
                             dl.Add(fe);
                         fl.Add(fe);
                     }
@@ -378,19 +378,19 @@ namespace SyncPath
             string format = @"
                 $dl=new-object System.Collections.ArrayList
                 $dl.Add(""{0}"")
-                while ($dl.Count -gt 0) {
+                while ($dl.Count -gt 0) {{
                 $tfl=[IO.Directory]::GetFileSystemEntries($dl[0])
                 $dl.removeAt(0)
                 foreach ($fe in $tfl)
-                {
+                {{
                 $fa =[io.file]::GetAttributes($fe)
-                if (($fa -bAnd [io.fileattributes]::Directory) -ne 0)
-                {
+                if (($fa -bAnd [io.fileattributes]::Directory) -ne 0 -and ($fa -bAnd [io.FileAttributes]::ReparsePoint) -eq 0)
+                {{
                 $dl.Add($fe) > $null
-                }
+                }}
                 $fe
-                }
-                }
+                }}
+                }}
             ";
             string command = string.Format(format, p);
 
