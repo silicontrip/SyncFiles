@@ -119,6 +119,7 @@ namespace DirectoryUsage
         {
             PSObject o = new PSObject();
 
+            // probably should just calculate that here and insert it as another column
             string human = @"switch($this.Length) { { $_ -gt 1tb } 
                         { ""{ 0:n2}T"" -f ($_ / 1tb) ; break }
                     { $_ -gt 1gb }
@@ -132,7 +133,6 @@ namespace DirectoryUsage
                 } 
             ";
 
-            // string h2 = @" { ""full"" } ";
             string[] props = { "Length", "FullName" };
             string[] propsh = { "ReadableLength", "FullName" };
 
@@ -145,7 +145,6 @@ namespace DirectoryUsage
             } else
             {
                 ps = new PSPropertySet("DefaultDisplayPropertySet", props);
-
             }
 
             PSMemberSet pm = new PSMemberSet("PSStandardMembers", new PSMemberInfo[] { ps });
