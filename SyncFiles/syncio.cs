@@ -86,7 +86,7 @@ namespace SyncPath
             public string lpProvider = "";
         }
         */
-        private static String SecureStringToString(SecureString value)
+/*        private static String SecureStringToString(SecureString value)
         {
             IntPtr valuePtr = IntPtr.Zero;
             try
@@ -99,7 +99,8 @@ namespace SyncPath
                 Marshal.ZeroFreeGlobalAllocUnicode(valuePtr);
             }
         }
-        /*
+  */
+              /*
         private static void ConnectToRemote(string remoteUNC, string username, string password)
         {
             NETRESOURCE nr = new NETRESOURCE();
@@ -203,20 +204,14 @@ namespace SyncPath
 
         public SyncStat GetInfo(string p)
         {
-           // try
-          //  {
-                FileAttributes fa = System.IO.File.GetAttributes(p);
 
-                if ((fa & FileAttributes.Directory) == FileAttributes.Directory)
-                    return new SyncStat(new DirectoryInfo(p));
+            FileAttributes fa = System.IO.File.GetAttributes(p);
+
+            if ((fa & FileAttributes.Directory) == FileAttributes.Directory)
+                return new SyncStat(new DirectoryInfo(p));
 
                 //  are there more types?
-                return new SyncStat(new FileInfo(p));
-          //  }
-          //  catch (Exception)
-           // {
-          //      return new SyncStat();
-           // }
+            return new SyncStat(new FileInfo(p));
         }
 
         public void SetInfo(string p, SyncStat f)
@@ -226,31 +221,10 @@ namespace SyncPath
             if ((f.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
                 pfi = new DirectoryInfo(p);
            
-                pfi.CreationTimeUtc = f.CreationTimeUtc;
+            pfi.CreationTimeUtc = f.CreationTimeUtc;
             pfi.LastWriteTimeUtc = f.LastWriteTimeUtc;
 
             pfi.Attributes = f.Attributes; // it appears that you can no longer set the times on a file if the read only bit is set even though we set it.
-/*
-            try
-            { 
-               
-            }
-            catch (Exception e)
-            {
-            */
-                // ocassionally we get the incorrect time from f.LastWriteTimeUtc
-                // which causes set lastWriteTime to fail
-                // hopefully this is not too important
-                // May want to print a warning...?
-              //  throw new IOException("Cannot set LastWriteTime");
-                /*
-                Console.WriteLine(e.StackTrace);
-                Console.WriteLine("Attributes: " + f.Attributes);
-                Console.WriteLine("Create: " + f.CreationTimeUtc);
-                Console.WriteLine("Modify: " + f.LastWriteTimeUtc);
-                */
-//            }
-
         }
 
         public string HashTotal(string p)
@@ -304,11 +278,8 @@ namespace SyncPath
             }
 
         }
-        // cater for short blocks
         public string HashBlock(string p, Int64 block)
         {
-
-            // Console.WriteLine("file: " + p + " Block: " + block);
 
             using (FileStream fs = System.IO.File.Open(p, System.IO.FileMode.Open,FileAccess.Read,FileShare.ReadWrite))
             {
@@ -390,7 +361,7 @@ namespace SyncPath
                 foreach ($fe in $tfl)
                 {{
                 $fa =[io.file]::GetAttributes($fe)
-                if (($fa -bAnd [io.fileattributes]::Directory) -ne 0 -and ($fa -bAnd [io.FileAttributes]::ReparsePoint) -eq 0)
+                if (($fa -bAnd [IO.FileAttributes]::Directory) -ne 0 -and ($fa -bAnd [io.FileAttributes]::ReparsePoint) -eq 0)
                 {{
                 $dl.Add($fe) > $null
                 }}
@@ -444,7 +415,7 @@ namespace SyncPath
 
         public void MakeDir(string p)
         {
-            string format = @"[System.IO.Directory]::CreateDirectory(""{0}"")";
+            string format = @"[IO.Directory]::CreateDirectory(""{0}"")";
             string command = string.Format(format, p);
             Pipeline pipe = session.Runspace.CreatePipeline();
 
@@ -483,8 +454,6 @@ namespace SyncPath
             string format = @"get-item -force ""{0}"""; // Force for hidden files
             string command = string.Format(format, p);
 
-            // Console.WriteLine("getinfo: "+ command);
-
             pipe.Commands.AddScript(command);
 
             Collection<PSObject> res = pipe.Invoke();
@@ -494,11 +463,6 @@ namespace SyncPath
                 return new SyncStat(ps);
             }
 
-            // return (FileInfo)ps1.BaseObject;
-            //            pipe.Dispose();
-
-           // Console.WriteLine("Failed: " + p);
-
             // no items
             throw new System.IO.FileLoadException();
         }
@@ -506,7 +470,6 @@ namespace SyncPath
         public void SetInfo(string p, SyncStat f)
         {
             Pipeline pipe = session.Runspace.CreatePipeline();
-            // string format;
 
             string cc = @"
                 $f=get-item -force ""{0}"" 
@@ -533,30 +496,16 @@ namespace SyncPath
             Pipeline pipe = session.Runspace.CreatePipeline();
 
             string f = @"
-                $fs=[System.IO.file]::OpenRead(""{0}"")
-                $sha=[system.security.cryptography.sha256]::Create()
-                $h=$sha.computehash($fs)
+                $fs=[IO.file]::OpenRead(""{0}"")
+                $sha=[Security.Cryptography.sha256]::Create()
+                $sha.ComputeHash($fs)
                 $sha.Dispose()
                 $fs.Close()
-                $h
             ";
 
             string command = string.Format(f, p);
 
             pipe.Commands.AddScript(command);
-
-            /*
-            string format = "$fs=[System.IO.file]::OpenRead(\"{0}\")";
-            string command = string.Format(format, p);
-
-            pipe.Commands.AddScript(command);
-
-            pipe.Commands.AddScript("$sha=[system.security.cryptography.sha256]::Create()");
-            pipe.Commands.AddScript("$h=$sha.computehash($fs)");
-            pipe.Commands.AddScript("$sha.Dispose()");
-            pipe.Commands.AddScript("$fs.Close()");
-            pipe.Commands.AddScript("$h");
-            */
 
             Collection<PSObject> res = pipe.Invoke();
             string result = "";
@@ -580,14 +529,13 @@ namespace SyncPath
             Int64 bloffset = block * g_blocksize;
 
             string f = @"
-                $fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)
-                $fs.Seek({1},[System.IO.SeekOrigin]::Begin) > $null
+                $fs=[IO.file]::Open(""{0}"",[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
+                $fs.Seek({1},[IO.SeekOrigin]::Begin) > $null
                 $b= New-Object System.byte[] {2}
                 $r=$fs.read($b,0,{2})
-                [System.Array]::Resize([ref]$b,$r)
-                $bs=[Convert]::ToBase64String($b)
                 $fs.close()
-                $bs
+                [Array]::Resize([ref]$b,$r)
+                [Convert]::ToBase64String($b)
             ";
 
             string command = string.Format(f,
@@ -640,12 +588,13 @@ namespace SyncPath
         {
             Pipeline pipe = session.Runspace.CreatePipeline();
 
-            string format = @"$fs=[IO.file]::Open(""{0}"",[IO.FileMode]::OpenOrCreate)
-            $r=$fs.Seek({1},[IO.SeekOrigin]::Begin)
-            $b=[Convert]::FromBase64String(""{2}"")
-            $fs.write($b,0,$b.Length)
-            $fs.SetLength(""{3}"")
-            $fs.close()
+            string format = @"
+                $fs=[IO.file]::Open(""{0}"",[IO.FileMode]::OpenOrCreate)
+                $r=$fs.Seek({1},[IO.SeekOrigin]::Begin)
+                $b=[Convert]::FromBase64String(""{2}"")
+                $fs.write($b,0,$b.Length)
+                $fs.SetLength(""{3}"")
+                $fs.close()
             ";
 
             Int64 bloffset = block * g_blocksize;
@@ -695,7 +644,7 @@ namespace SyncPath
         {
             Pipeline pipe = session.Runspace.CreatePipeline();
 
-            string format = "remove-item -force \"{0}\""; // Force for hidden files
+            string format = @"remove-item -force ""{0}"""; // Force for hidden files
             string command = string.Format(format, p);
             pipe.Commands.AddScript(command);
 
@@ -706,15 +655,16 @@ namespace SyncPath
         public string HashBlock(string p, Int64 block)
         {
 
-            string format = @"$fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open)
-            $r=$fs.Seek({1},[System.IO.SeekOrigin]::Begin)
-            $b=[System.byte[]]::new({2})
-            $r=$fs.read($b,0,{2})
-            $fs.close()
-            if ($r -eq 0) { throw ""EndOfFile""}
-            $sha=[system.security.cryptography.sha256]::Create()
-            $sha.computehash($b,0,$r)
-            $sha.dispose()
+            string format = @"
+                $fs=[IO.file]::Open(""{0}"",[IO.FileMode]::Open)
+                $r=$fs.Seek({1},[IO.SeekOrigin]::Begin)
+                $b=[byte[]]::new({2})
+                $r=$fs.read($b,0,{2})
+                $fs.close()
+                if ($r -eq 0) { throw ""EndOfFile""}
+                $sha=[Security.Cryptography.sha256]::Create()
+                $sha.ComputeHash($b,0,$r)
+                $sha.dispose()
             ";
             // string format = "$fs =[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::Open)";
 
