@@ -13,7 +13,7 @@ namespace SyncPath
     // Declare the class as a cmdlet and specify the
     // appropriate verb and noun for the cmdlet name.
 
-    [Cmdlet(VerbsData.Sync, "ChildItems")]
+    [Cmdlet(VerbsData.Sync, "ChildItem")]
     public class SyncPathCommand : PSCmdlet
     {
         IO src;
@@ -343,8 +343,8 @@ namespace SyncPath
 
                 if (srcType.isDir())
                 {
+                    if (!absdst.EndsWith("\\")) absdst += "\\" + System.IO.Path.GetFileName(abssrc) +"\\";
                     if (!abssrc.EndsWith("\\")) abssrc += "\\";
-                    if (!absdst.EndsWith("\\")) absdst += "\\";
 
                     try
                     {
@@ -356,7 +356,7 @@ namespace SyncPath
                         }
                         else
                         {
-                            WriteVerbose("Target Dir Exists " + absdst);
+                            // WriteVerbose("Target Dir Exists " + absdst);
                             WriteDebug("Directory exists");
                             // check for delete
                             if (delete)
