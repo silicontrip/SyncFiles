@@ -51,6 +51,7 @@ namespace net.ninebroadcast
 
         }
 
+        public bool isReparse() { return ((this.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint); }
         public bool isDir() { return ((this.Attributes & FileAttributes.Directory) == FileAttributes.Directory); }
     }
 }
