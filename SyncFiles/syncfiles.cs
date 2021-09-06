@@ -267,6 +267,7 @@ namespace net.ninebroadcast
         protected override void ProcessRecord()
         {
             Collection<IO> src;
+			Collection<IO> tdst;
             IO dst;
 
             ProgressRecord prog = null;
@@ -288,13 +289,20 @@ namespace net.ninebroadcast
                 if (tosession != null)
                 {
                   //  Console.WriteLine("dst remote: {0}",target);
-                    dst = new RemoteIO(tosession,target);
+                    //dst = new RemoteIO(tosession,target);
+					tdst = IOFactory(tosession,target);
                 }
                 else
                 {
                   //  Console.WriteLine("dst local: {0}",target);
-                    dst = new LocalIO(this.SessionState,target);
+                    //dst = new LocalIO(this.SessionState,target);
+					tdst = IOFactory(null,target);
                 }
+
+				if (tdst.Length > 1)
+					throw "Ambiguous destination.";
+
+				dst = tdst[0];
 
                 int count = 0;
                 foreach (IO cdir in src)
@@ -329,7 +337,7 @@ namespace net.ninebroadcast
                         }
 // basic rsync options (-a) assumed to always be active
 // recursive
-// (links disabled by default)
+// copy links (maybe difficult for windows, symlinks are privileged)
 // preserve permissions (attributes & acl) or if implementing -Extended attributes only
 // preserve times; System.IO.File.GetAttributes(path) FileSystemInfo
 
