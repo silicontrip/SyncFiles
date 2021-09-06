@@ -304,6 +304,7 @@ namespace net.ninebroadcast
 
                     foreach (string file in dd)
                     {
+                        // Move these into match strategy class
                         bool include = true;
                         if (includeList != null)
                         {
@@ -328,9 +329,10 @@ namespace net.ninebroadcast
                         }
 // basic rsync options (-a) assumed to always be active
 // recursive
-// copy links (maybe difficult for windows, symlinks are privileged)
+// (links disabled by default)
 // preserve permissions (attributes & acl) or if implementing -Extended attributes only
-// preserve times
+// preserve times; System.IO.File.GetAttributes(path) FileSystemInfo
+
 // preserve group
 // preserve owner 
 // Devices (N/A)
@@ -338,7 +340,7 @@ namespace net.ninebroadcast
 // TODO: (these are possible options that could be implemented relatively easily)
 // going to put future implementable options here
 // -Checksum copy based on checksum not date/size
-// -Update skip newer files in destination
+// -Update, skip newer files in destination
 // -inplace (normal operation is to write to temporary file and rename)
 // -WhatIf (aka dry run)
 // -Whole don't perform block check
@@ -348,23 +350,31 @@ namespace net.ninebroadcast
 // -minSize / -maxsize
 // -compress (maybe)
 // -Extended (acl)
+// -Links, copy reparse target (https://gist.github.com/LGM-AdrianHum/260bc9ab3c4cd49bc8617a2abe84ca74)
+
                         count++;
                         if (include)
                         {
                             if (progress)
                                 prog = new ProgressRecord(1, file, "Copying");
+                            try {
+                            // Console.WriteLine("src: {0}",file);
+                                WriteVerbose(file);
+                                SyncStat srcType = cdir.GetInfo(file);  // relative from src basepath
+                                if (srcType.isDir())
+                                {
+                                // Console.WriteLine ("MKDIR: {0}",dst.DestinationCombine(file));
+                                    dst.MakeDir(file);
+                                } else {
 
-                           // Console.WriteLine("src: {0}",file);
-                            WriteVerbose(file);
-                            SyncStat srcType = cdir.GetInfo(file);  // relative from src basepath
-                            if (srcType.isDir())
-                            {
-                               // Console.WriteLine ("MKDIR: {0}",dst.DestinationCombine(file));
-                                dst.MakeDir(file);
-                            } else {
-                               // Console.WriteLine( "COPY TO: {0}",dst.DestinationCombine(file));
-                               //dst.copyfrom(cdir,file,prog);
-                                copy(cdir,file,dst,file,prog);
+                                // Console.WriteLine( "COPY TO: {0}",dst.DestinationCombine(file));
+                                //dst.copyfrom(cdir,file,prog);
+                                    copy(cdir,file,dst,file,prog);
+                                    dst.SetInfo(file,cdir.GetInfo(file));
+                                }
+                            } catch (Exception e) {
+                                ErrorRecord er = new ErrorRecord(e, "Copy", ErrorCategory.WriteError, null);
+                                WriteError(er);
                             }
                         }
                     }
