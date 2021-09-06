@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Management.Automation;
 
-namespace SyncPath
+namespace net.ninebroadcast
 {
 
     public class SyncStat
@@ -52,7 +52,5 @@ namespace SyncPath
         }
 
         public bool isDir() { return ((this.Attributes & FileAttributes.Directory) == FileAttributes.Directory); }
-        public bool isReparsePoint() { return ((this.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint); }
-
     }
 }
