@@ -18,68 +18,6 @@ namespace net.ninebroadcast
     [Cmdlet(VerbsData.Sync, "ChildItem")]
     public class SyncPathCommand : PSCmdlet
     {
-        IO src;
-        IO dst;
-
-        protected void copy(string srcFile, string dstFile, ProgressRecord prog)
-        {
-
-            Int64 bytesxfered = 0;
-            Int32 block = 0;
-            Byte[] b;
-
-            SyncStat srcInfo = src.GetInfo(srcFile);
-            SyncStat dstInfo;
-            try
-            {
-                dstInfo = dst.GetInfo(dstFile);
-            } catch
-            {
-                dstInfo = new SyncStat();
-            }
-  //          do some clever compare
-
-            do
-            {
-                WriteDebug("Do Block copy: " + block);
-                bool copyBlock = true;
-                if (dstInfo.Exists)
-                {
-                    // doesn't look very clever to me
-                    string srcHash = src.HashBlock(srcFile, block);  // we should worry if this throws an error
-                    try { 
-                        string dstHash = dst.HashBlock(dstFile, block); 
-                        if (srcHash.Equals(dstHash)) copyBlock = false;
-                    } catch {
-                        copyBlock = true;
-                    }
-                }
-                WriteDebug("will copy block: " + copyBlock);
-                if (copyBlock)
-                {
-                    b = src.ReadBlock(srcFile, block); // throw error report file failure
-                    dst.WriteBlock(dstFile, block, b);
-                }
-                if (bytesxfered + LocalIO.g_blocksize > srcInfo.Length)
-                    bytesxfered = srcInfo.Length;
-                else
-                    bytesxfered += LocalIO.g_blocksize;
-
-                // update progress
-                if (prog != null)
-                {
-                    prog.PercentComplete = 100;
-                    // Console.WriteLine(String.Format("{0} {1}", bytesxfered, srcInfo.Length));
-                    // add b/s and eta
-
-                    if (srcInfo.Length != 0)
-                        prog.PercentComplete = (int)(100 * bytesxfered / srcInfo.Length);
-                    WriteProgress(prog);
-                }
-                block++;
-            } while (bytesxfered < srcInfo.Length);
-        }
-
         // Declare the parameters for the cmdlet.
         [Alias("FullName")]
         [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
@@ -210,10 +148,9 @@ namespace net.ninebroadcast
             SyncStat dstInfo;
             try
             {
-                dstInfo = dst.GetInfo(dstFile);
-            } catch
-            {
-                dstInfo = new SyncStat();
+            	dstInfo = dst.GetInfo(dstFile);
+            } catch {
+				dstInfo = new SyncStat();
             }
   //          do some clever compare
 
@@ -232,6 +169,10 @@ namespace net.ninebroadcast
                     try { 
                         string dstHash = dst.HashBlock(dstFile, block); 
                         if (srcHash.Equals(dstHash)) copyBlock = false;
+
+						WriteDebug(String.Format("src hash: {0}",srcHash));
+						WriteDebug(String.Format("dst hash: {0}",dstHash));
+
                     } catch {
                         copyBlock = true;
                     }
@@ -260,6 +201,12 @@ namespace net.ninebroadcast
                 }
                 block++;
             } while (bytesxfered < srcInfo.Length);
+			if (prog != null)
+			{
+				prog.RecordType = ProgressRecordType.Completed;
+				WriteProgress(prog);
+			}
+
         }
 
         // Override the ProcessRecord method to process
@@ -286,21 +233,22 @@ namespace net.ninebroadcast
 
             // target should not be expandable
             // well only if it expands into 1 item
+				string[] ta = new string[] {target};
                 if (tosession != null)
                 {
                   //  Console.WriteLine("dst remote: {0}",target);
                     //dst = new RemoteIO(tosession,target);
-					tdst = IOFactory(tosession,target);
+					tdst = IOFactory(tosession,ta);
                 }
                 else
                 {
                   //  Console.WriteLine("dst local: {0}",target);
                     //dst = new LocalIO(this.SessionState,target);
-					tdst = IOFactory(null,target);
+					tdst = IOFactory(null,ta);
                 }
 
-				if (tdst.Length > 1)
-					throw "Ambiguous destination.";
+				if (tdst.Count > 1)
+					throw  new ArgumentException("Ambiguous destination.","Target");
 
 				dst = tdst[0];
 

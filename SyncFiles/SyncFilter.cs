@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Management.Automation;
+using System.Text.RegularExpressions;
 
 namespace net.ninebroadcast
 {
@@ -23,6 +24,7 @@ namespace net.ninebroadcast
 					if (me.Success) { include = true; }
 				}
 			}
+			return include;
 		}
 
 
