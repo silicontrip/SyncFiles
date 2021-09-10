@@ -18,9 +18,6 @@ namespace net.ninebroadcast
     [Cmdlet(VerbsData.Sync, "ChildItem")]
     public class SyncPathCommand : PSCmdlet
     {
-        //IO src;
-        //IO dst;
-
         // Declare the parameters for the cmdlet.
         [Alias("FullName")]
         [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
@@ -153,10 +150,9 @@ namespace net.ninebroadcast
             SyncStat dstInfo;
             try
             {
-                dstInfo = dst.GetInfo(dstFile);
-            } catch
-            {
-                dstInfo = new SyncStat();
+            	dstInfo = dst.GetInfo(dstFile);
+            } catch {
+				dstInfo = new SyncStat();
             }
   //          do some clever compare
 
@@ -175,6 +171,10 @@ namespace net.ninebroadcast
                     try { 
                         string dstHash = dst.HashBlock(dstFile, block); 
                         if (srcHash.Equals(dstHash)) copyBlock = false;
+
+						WriteDebug(String.Format("src hash: {0}",srcHash));
+						WriteDebug(String.Format("dst hash: {0}",dstHash));
+
                     } catch {
                         copyBlock = true;
                     }
@@ -203,6 +203,12 @@ namespace net.ninebroadcast
                 }
                 block++;
             } while (bytesxfered < srcInfo.Length);
+			if (prog != null)
+			{
+				prog.RecordType = ProgressRecordType.Completed;
+				WriteProgress(prog);
+			}
+
         }
 
         // Override the ProcessRecord method to process
@@ -229,7 +235,7 @@ namespace net.ninebroadcast
 
             // target should not be expandable
             // well only if it expands into 1 item
-                string[] ta =  new string[] {target};
+				string[] ta = new string[] {target};
                 if (tosession != null)
                 {
                   //  Console.WriteLine("dst remote: {0}",target);
@@ -244,7 +250,7 @@ namespace net.ninebroadcast
                 }
 
 				if (tdst.Count > 1)
-					throw new ArgumentException("Ambiguous destination.");
+					throw  new ArgumentException("Ambiguous destination.","Target");
 
 				dst = tdst[0];
 
