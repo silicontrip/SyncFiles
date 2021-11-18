@@ -4,11 +4,13 @@ using System.Management.Automation.Runspaces;
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Security;
-using Microsoft.VisualBasic.CompilerServices;
+using System.Text.RegularExpressions;
+// using Microsoft.VisualBasic.CompilerServices;
 
-namespace SyncPath
+namespace net.ninebroadcast
 {
     // Declare the class as a cmdlet and specify the
     // appropriate verb and noun for the cmdlet name.
@@ -16,102 +18,21 @@ namespace SyncPath
     [Cmdlet(VerbsData.Sync, "ChildItem")]
     public class SyncPathCommand : PSCmdlet
     {
-        IO src;
-        IO dst;
 
-        // .net standard 2.0 does not have this function
-        // taken from  https://stackoverflow.com/questions/275689/how-to-get-relative-path-from-absolute-path/340454#340454
-        public static String MakeRelativePath(String fromPath, String toPath)
+        public
+        SyncPathCommand()
         {
-
-            if (String.IsNullOrEmpty(fromPath)) throw new ArgumentNullException("fromPath");
-            if (String.IsNullOrEmpty(toPath)) throw new ArgumentNullException("toPath");
-
-            Uri fromUri = new Uri(fromPath);
-            Uri toUri = new Uri(toPath);
-
-            if (fromUri.Scheme != toUri.Scheme) { return toPath; } // path can't be made relative.
-
-            Uri relativeUri = fromUri.MakeRelativeUri(toUri);
-            String relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-
-            if (toUri.Scheme.Equals("file", StringComparison.InvariantCultureIgnoreCase))
-            {
-                relativePath = relativePath.Replace(System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.DirectorySeparatorChar);
-            }
-
-            return relativePath;
-        }
-
-
-        protected void copy(string srcFile, string dstFile, ProgressRecord prog)
-        {
-
-            Int64 bytesxfered = 0;
-            Int32 block = 0;
-            Byte[] b;
-
-            SyncStat srcInfo = src.GetInfo(srcFile);
-            SyncStat dstInfo;
-            try
-            {
-                dstInfo = dst.GetInfo(dstFile);
-            } catch
-            {
-                dstInfo = new SyncStat();
-            }
-  //          do some clever compare
-
-            do
-            {
-                WriteDebug("Do Block copy: " + block);
-                bool copyBlock = true;
-                if (dstInfo.Exists)
-                {
-                    // doesn't look very clever to me
-                    string srcHash = src.HashBlock(srcFile, block);  // we should worry if this throws an error
-                    try { 
-                        string dstHash = dst.HashBlock(dstFile, block); 
-                        if (srcHash.Equals(dstHash)) copyBlock = false;
-                    } catch {
-                        copyBlock = true;
-                    }
-                }
-                WriteDebug("will copy block: " + copyBlock);
-                if (copyBlock)
-                {
-                    b = src.ReadBlock(srcFile, block); // throw error report file failure
-                    dst.WriteBlock(dstFile, block, b);
-                }
-                if (bytesxfered + LocalIO.g_blocksize > srcInfo.Length)
-                    bytesxfered = srcInfo.Length;
-                else
-                    bytesxfered += LocalIO.g_blocksize;
-
-                // update progress
-                if (prog != null)
-                {
-                    prog.PercentComplete = 100;
-                    // Console.WriteLine(String.Format("{0} {1}", bytesxfered, srcInfo.Length));
-                    // add b/s and eta
-
-                    if (srcInfo.Length != 0)
-                        prog.PercentComplete = (int)(100 * bytesxfered / srcInfo.Length);
-                    WriteProgress(prog);
-                }
-                block++;
-            } while (bytesxfered < srcInfo.Length);
         }
 
         // Declare the parameters for the cmdlet.
         [Alias("FullName")]
         [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
-        public string Path
+        public string[] Path
         {
             get { return path; }
             set { path = value; }
         }
-        private string path;
+        private string[] path = {"."};
 
         [Alias("Destination")]
         [Parameter(Mandatory = true, Position = 1)]
@@ -186,485 +107,248 @@ namespace SyncPath
         }
         private string[] includeList;
 
+    private Collection<IO> IOFactory(PSSession session,string[] path)
+        {
+            List<IO> src = new List<IO>();
+
+            foreach (string p in path)
+            {
+                WriteDebug(String.Format("Expanding: {0}",p));
+                Collection<string> expath;
+
+                if (session != null)
+                {
+                    expath = RemoteIO.ExpandPath(p,session);
+                } else {
+/*
+			        string cur = this.SessionState.Path.CurrentFileSystemLocation.ToString();
+
+			        string pp = System.IO.Path.Combine(cur, p);
+
+                    WriteDebug(String.Format("combine: {0}",pp));
+
+    			    string cpath = System.IO.Path.GetDirectoryName(pp);
+	    		    string card = System.IO.Path.GetFileName(pp);
+
+                    WriteDebug(String.Format("path: {0} card: {1}",cpath,card));
+*/
+                    expath = LocalIO.ExpandPath(p,this.SessionState);
+                }
+
+			WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
+
+                // expath should all be absolute
+                foreach (string ep in expath)
+                {
+                    WriteDebug(String.Format("Expanded: {0}",ep));
+                    if (session != null)
+                    {
+		                WriteDebug(String.Format("Remote add: {0}",ep));
+                        src.Add( new RemoteIO(session,ep));
+                    }
+                    else
+                    {
+		                WriteDebug(String.Format("local add: {0}",ep));
+                        src.Add( new LocalIO(this.SessionState,ep));
+                    }
+                }
+
+            }
+            WriteDebug("IOFactory exit.");
+            return new Collection<IO> (src);
+        }
+
+        // private void copy(IO src,string srcFile, IO dst, string dstFile, ProgressRecord prog)
+        private void copy(string srcFile, IO src, string dstFile, IO dst, ProgressRecord prog)
+        {
+
+            Int64 bytesxfered = 0;
+            Int32 block = 0;
+            Byte[] b;
+
+            SyncStat srcInfo = src.GetInfo(srcFile);
+            SyncStat dstInfo;
+            try
+            {
+            	dstInfo = dst.GetInfo(dstFile);
+            } catch {
+				dstInfo = new SyncStat();
+            }
+
+            // do some clever compare
+            // src date newer dst date
+            // src size != dst size
+            // src chksum != dst chksum
+
+            do
+            {
+                WriteDebug("Do Block copy: " + block);
+                bool copyBlock = true;
+                if (dstInfo.Exists)
+                {
+                    // doesn't look very clever to me
+                    string srcHash = src.HashBlock(srcFile, block);  // we should worry if this throws an error
+                    try { 
+                        string dstHash = dst.HashBlock(dstFile, block); 
+                        if (srcHash.Equals(dstHash)) copyBlock = false;
+
+						WriteDebug(String.Format("src hash: {0}",srcHash));
+						WriteDebug(String.Format("dst hash: {0}",dstHash));
+
+                    } catch {
+                        copyBlock = true;
+                    }
+                }
+                WriteDebug("will copy block: " + copyBlock);
+                if (copyBlock)
+                {
+                    b = src.ReadBlock(srcFile, block); // throw error report file failure
+                    dst.WriteBlock(dstFile, block, b);
+                }
+                if (bytesxfered + LocalIO.g_blocksize > srcInfo.Length)
+                    bytesxfered = srcInfo.Length;
+                else
+                    bytesxfered += LocalIO.g_blocksize;
+
+                // update progress
+                if (prog != null)
+                {
+                    prog.PercentComplete = 100;
+                    // Console.WriteLine(String.Format("{0} {1}", bytesxfered, srcInfo.Length));
+                    // add b/s and eta
+
+                    if (srcInfo.Length != 0)
+                        prog.PercentComplete = (int)(100 * bytesxfered / srcInfo.Length);
+                    WriteProgress(prog);
+                }
+                block++;
+            } while (bytesxfered < srcInfo.Length);
+			if (prog != null)
+			{
+				prog.RecordType = ProgressRecordType.Completed;
+				WriteProgress(prog);
+			}
+
+        }
+
         // Override the ProcessRecord method to process
-        // the supplied user name and write out a
-        // greeting to the user by calling the WriteObject
-        // method.
+
         protected override void ProcessRecord()
         {
-            Collection<string> filelist;
+            Collection<IO> src;
+			Collection<IO> tdst;
+            IO dst;
+
             ProgressRecord prog = null;
             try
             {
-
                // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
-
-                // Determine if path and target are rel or abs
-                string abssrc;
-                string absdst;
-
-                // this decision tree is getting a bit large
-
-                // also check for UNC paths
-               // if (!path.Contains(":\\") && !(path.StartsWith("\\\\")))
-                if (!System.IO.Path.IsPathRooted(path))
+                if (fromsession != null)
                 {
-                    if (fromsession != null)
-                    {
-                        src = new RemoteIO(fromsession);
-                    }
-                    else
-                    {
-                        src = new LocalIO(this.SessionState);
-                    }
-                    // relative path
-                    abssrc = System.IO.Path.Combine(src.GetCwd(), path);
-                    // cannot have unc relative paths
+                    WriteDebug("From Session:");
+                    src= IOFactory (fromsession,path);
                 }
                 else
                 {
-                    if (path.StartsWith("\\\\"))
-                    {
-                        if (credential != null) {
-                            if (fromsession != null)
-                            {
-                                // but maybe we're supplying credentials for the destination? check dst UNC abs path
-                                if (target.StartsWith("\\\\") && ToSession == null)
-                                    { src = new RemoteIO(fromsession); }
-                                else
-                                {
-                                    WriteDebug("only local unc paths...");
-                                    throw new ArgumentException("Only Local UNC Paths can have Credentials");
-                                }
-                            }
-                            else
-                            {
-                                src = new LocalIO(this.SessionState, credential, path);
-                            }
-                        } else {
-                            if (fromsession != null)
-                            {
-                                src = new RemoteIO(fromsession);
-                            }
-                            else
-                            {
-                                src = new LocalIO(this.SessionState);
-                            }
-                        }
-                    } else
-                    {
-                        if (fromsession != null)
-                        {
-                            src = new RemoteIO(fromsession);
-                        }
-                        else
-                        {
-                            src = new LocalIO(this.SessionState);
-                        }
-                    }
-                    // ProviderInfo pi;
-                    abssrc = GetUnresolvedProviderPathFromPSPath(path);
+                   // Console.WriteLine("src local: {0}",target);
+                     WriteDebug("local path:");
+                    src = IOFactory(null,path);
                 }
 
-                // I can't do a remote session authentication (maybe yet)
-
-                //if (!target.Contains(":\\") && !(target.StartsWith("\\\\")))
-                if (!System.IO.Path.IsPathRooted(target))
+            // target should not be expandable
+            // well only if it expands into 1 item
+				string[] ta = new string[] {target};
+                if (tosession != null)
                 {
-                    if (tosession != null)
-                    {
-                        dst = new RemoteIO(tosession);
-                    }
-                    else
-                    {
-                        dst = new LocalIO(this.SessionState);
-                    }
-
-                    string dstcwd = dst.GetCwd();
-                    if (dstcwd.Length == 0)
-                    {
-                        throw new DirectoryNotFoundException("Cannot get destination CWD");
-                    }
-                    WriteDebug("Dst cwd:" + dstcwd);
-                    absdst = System.IO.Path.Combine(dstcwd, target);
+                    WriteDebug(String.Format("dst remote: {0}",target));
+                    //dst = new RemoteIO(tosession,target);
+					tdst = IOFactory(tosession,ta);
                 }
                 else
                 {
-                    if (target.StartsWith("\\\\"))
-                    {
-                        if (credential != null)
-                        {
-                            if (tosession != null)
-                            {
-                                if (path.StartsWith("\\\\") && FromSession == null)
-                                {
-                                    dst = new RemoteIO(tosession);
-                                }
-                                else
-                                {
-                                    throw new ArgumentException("Only Local UNC Paths can have Credentials");
-                                }
-                            }
-                            else
-                            {
-                                dst = new LocalIO(this.SessionState, credential, path);
-                            }
-                        } else
-                        {
-                            if (tosession != null)
-                            {
-                                dst = new RemoteIO(tosession);
-                            }
-                            else
-                            {
-                                dst = new LocalIO(this.SessionState);
-                            }
-                        }
-                    } else
-                    {
-                        if (tosession != null)
-                        {
-                            dst = new RemoteIO(tosession);
-                        }
-                        else
-                        {
-                            dst = new LocalIO(this.SessionState);
-                        }
-                    }
-
-                    absdst = GetUnresolvedProviderPathFromPSPath(target);
+                    WriteDebug(String.Format("dst local: {0}",target));
+                    //dst = new LocalIO(this.SessionState,target);
+					tdst = IOFactory(null,ta);
                 }
 
-                WriteDebug("SOURCE: " + abssrc);
+				if (tdst.Count > 1)
+					throw  new ArgumentException("Ambiguous destination.","Target");
 
-                SyncStat srcType = src.GetInfo(abssrc);
-                if (!srcType.Exists)
-                    throw (new System.IO.FileNotFoundException()); // fatal error, goodbye
-
-                if (srcType.isDir())
-                {
-                    if (!absdst.EndsWith("\\")) absdst += "\\" + System.IO.Path.GetFileName(abssrc) +"\\";
-                    if (!abssrc.EndsWith("\\")) abssrc += "\\";
-
-                    try
-                    {
-                        SyncStat ss = dst.GetInfo(absdst); // throws a cast exception
-                        if (!ss.Exists)
-                        {
-                            WriteVerbose(absdst);
-                            dst.MakeDir(absdst);
-                        }
-                        else
-                        {
-                            // WriteVerbose("Target Dir Exists " + absdst);
-                            WriteDebug("Directory exists");
-                            // check for delete
-                            if (delete)
-                            {
-                                WriteDebug("will delete");
-                                Collection<string> dstfilelist = dst.ReadDir(absdst);
-                                for (int i =dstfilelist.Count-1; i>=0; i--)
-                              //  foreach (string file in dstfilelist)
-                                {
-                                    string file = dstfilelist[i];
-                                    if (progress)
-                                        prog = new ProgressRecord(1, file, "Deleting");
-                                    string srcfile="";
-                                    string relfile = "";
-                                    string dstfile = "";
-                                    try
-                                    {
-                                         relfile = MakeRelativePath(absdst, file);
-                                       // WriteDebug(String.Format("MakeRelativePath {0} -> {1} = {2}\n", file, absdst, relfile));
-
-                                        srcfile = System.IO.Path.Combine(abssrc, relfile);
-                                        dstfile = System.IO.Path.Combine(absdst, relfile);
-                                        SyncStat sss = src.GetInfo(srcfile); // throws if not found
-                                        /*
-                                        if (!sss.Exists)
-                                        {
-                                            WriteVerbose("Deleting: " + relfile);
-                                            WriteDebug("abs :" + dstfile);
-                                            dst.Delete(dstfile);
-                                        }
-                                        */
-                                    }
-                                    catch (Exception e)
-                                    {
-                                        // must delete files first.
-                                        WriteVerbose("Deleting: " + relfile);
-                                        WriteDebug("abs :" + dstfile);
-                                        try
-                                        {
-                                            dst.Delete(dstfile);
-                                        } catch (Exception ex)
-                                        {
-                                            WriteDebug("Cannot delete: " + ex.ToString());
-                                        }
-                                        WriteDebug("file not found: " + srcfile + " : " + e.ToString());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception e) // remote throws different exception to local
-                    {
-                        WriteDebug(e.Message);
-                        WriteDebug(e.StackTrace);
-                        WriteDebug(String.Format("exception MakeDir {0}", absdst));
-
-                        WriteVerbose(absdst);
-                        dst.MakeDir(absdst);
-                    }
-
-                    filelist = src.ReadDir(abssrc);
-                }
-                else
-                {
-                    filelist = new Collection<string> { abssrc };
-                    abssrc = System.IO.Path.GetDirectoryName(abssrc);
-                    if (!abssrc.EndsWith("\\")) abssrc += "\\";
-
-                }
-                // Determine if src is file or dir
-
-                // is target absolute or relative
-                // get dst cwd
-                if (!absdst.EndsWith("\\")) absdst += "\\";
-
-                WriteDebug(String.Format("Arguments {0} -> {1}\n", abssrc, absdst));
-
-
-
-                if (progress)
-                    prog = new ProgressRecord(1, abssrc, "Copying");
+				dst = tdst[0];
 
                 int count = 0;
-                foreach (string file in filelist)
+                foreach (IO cdir in src)
                 {
-                    bool include = true;
+                   // WriteVerbose(cdir.AbsPath());
+                    Collection<string> dd = cdir.ReadDir();
 
-                    // add include / exclude
-                    if (includeList != null)
+                    foreach (string file in dd)
                     {
-                        include = false;
-                        foreach (string m in includeList)
+                        bool include = true;
+                        if (includeList != null)
                         {
-                            if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = true; }
-                        }
-                    }
-
-                    if (excludeList != null)
-                    {
-                        foreach (string m in excludeList)
-                        {
-                            if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = false; }
-                        }
-                    }
-                    count++;
-                    if (include)
-                    {
-                        if (progress)
-                            prog = new ProgressRecord(1, file, "Copying");
-
-                        try
-                        {
-                            string relfile = MakeRelativePath(abssrc, file);
-                            WriteDebug(String.Format("MakeRelativePath {0} -> {1} = {2}\n", file, abssrc, relfile));
-
-                            string dstfile = System.IO.Path.Combine(absdst, relfile);
-
-                            SyncStat srcInfo = src.GetInfo(file);  // may throw
-                            // sometimes getting nulls
-                            if (srcInfo.isDir())
+                            include = false;
+                            foreach (string m in includeList)
                             {
-                                WriteDebug(String.Format("src isDir: {0}", file));
-                                try
-                                {
-                                    SyncStat ss = dst.GetInfo(dstfile);
-                                    if (!ss.Exists)
-                                    {
-                                        WriteVerbose(relfile);
-                                        dst.MakeDir(dstfile);
-                                    }
-                                    else
-                                    {
-                                        WriteVerbose(String.Format("{0}/{1} SKIPPING {2}", count, filelist.Count, relfile));
-                                        WriteDebug("Directory Exists");
-                                    }
-                                }
-                                catch (Exception)
-                                {
-                                    WriteVerbose(relfile);
-                                    dst.MakeDir(dstfile);
-                                }
+							    // string, string, method
+							    Match me = Regex.Match(file,m);
+							    if (me.Success) { include = true; }
+                            // if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = true; }
                             }
-                            else
+                        }
+
+                        if (excludeList != null)
+                        {
+                            foreach (string m in excludeList)
                             {
-                                //  FileInfo srcfInfo = (FileInfo)srcInfo;
-
-                                WriteDebug(String.Format("Compare and Copy from {1} to {0}", dstfile, file));
-                                // check if dst exists
-                                // compare relfile	
-                                SyncStat dstInfo;
-                                try
-                                {
-
-                                    dstInfo = dst.GetInfo(dstfile); // don't care if throws
-                                    
-                                    if (!dstInfo.Exists)
-                                    {
-                                        WriteVerbose(relfile);
-                                        WriteDebug("COPY NEW");
-
-                                        if (progress)
-                                        {
-                                            prog = new ProgressRecord(1, file, "Copying");
-                                            prog.StatusDescription = String.Format("Copying {0}/{1}", count, filelist.Count);
-                                        }
-
-                                         copy(file, dstfile,  prog);
-
-                                    }
-                                    else if  (srcInfo.Length != dstInfo.Length)
-                                    {
-                                        WriteVerbose(relfile);
-                                        WriteDebug("COPY UPDATE (length)");
-
-                                        if (progress)
-                                        {
-                                            prog = new ProgressRecord(1, file, "Copying");
-                                            prog.StatusDescription = String.Format("Copying {0}/{1}", count, filelist.Count);
-                                        }
-
-
-                                        copy(file, dstfile, prog);
-                                    }
-
-                                    else if (Checksum) // if checksum specified check on chksum rather than length and date. but different length should be a dead giveaway.
-                                    {
-                                       // WriteVerbose(relfile);
-                                        WriteDebug("UPDATE (checksum)");
-
-                                        if (progress)
-                                        {
-                                            prog = new ProgressRecord(1, file, "Checking");
-                                            prog.StatusDescription = String.Format("Checking {0}/{1}", count, filelist.Count);
-                                            prog.PercentComplete = 0;
-
-                                            WriteProgress(prog);
-                                        }
-                                        // these can be done simultaneously... especially if one or both are on a remote machine.
-                                        string srcHash = src.HashTotal(file);
-                                        if (progress)
-                                        {
-                                            prog.PercentComplete = 50;
-                                            WriteProgress(prog);
-                                        }
-                                        string dstHash = dst.HashTotal(dstfile);
-                                        if (progress)
-                                        {
-                                            prog.PercentComplete = 100;
-                                            WriteProgress(prog);
-                                        }
-
-                                        if (!srcHash.Equals(dstHash))
-                                        {
-                                            WriteVerbose(relfile);
-                                            WriteDebug(String.Format("COPY UPDATE. file hash mismatch: {0} <-> {1}", srcHash, dstHash));
-                                            // WriteDebug("COPY update hash");
-
-                                            if (progress) {
-                                                prog = new ProgressRecord(1, file, "Copying");
-                                                prog.StatusDescription = String.Format("Copying {0}/{1}", count, filelist.Count);
-                                            }
-                                            copy(file, dstfile, prog);
-
-                                        }
-                                        else
-                                        {
-                                            WriteVerbose(String.Format("{0}/{1} SKIPPING {2}", count, filelist.Count, relfile));
-                                            WriteDebug("File hash match");
-                                        }
-                                    }
-                                    else if (srcInfo.LastWriteTimeUtc > dstInfo.LastWriteTimeUtc)
-                                    {
-                                        WriteVerbose(relfile);
-                                        WriteDebug("COPY UPDATE (date)");
-
-                                        if (progress)
-                                        {
-                                            prog = new ProgressRecord(1, file, "Copying");
-                                            prog.StatusDescription = String.Format("Copying {0}/{1}", count, filelist.Count);
-                                        }
-                    
-                                            copy(file, dstfile, prog);
-
-                                    }
-                                    else
-                                    {
-                                        if (progress && this.MyInvocation.BoundParameters.ContainsKey("Verbose"))
-                                        {
-                                            prog.RecordType = ProgressRecordType.Completed;
-                                        }
-
-                                            WriteVerbose(String.Format ("{0}/{1} SKIPPING {2}" ,count,filelist.Count, relfile));
-                                        WriteDebug("Date-length match");
-                                    }
-                                }
-                                catch (Exception e)
-                                {
-
-                                    WriteDebug("CHECK : " + file + " : " + e.GetType().ToString() +" : " + e.Message);
-
-                                    // could be a destination not exist
-
-                                    WriteVerbose(relfile);
-                                    WriteDebug("COPY NEW");
-
-                                    if (progress)
-                                    {
-                                        WriteDebug("Setup Progress");
-                                        prog = new ProgressRecord(1, file, "Copying");
-                                        prog.StatusDescription = String.Format("Copying {0}/{1}", count, filelist.Count);
-                                    }
-
-                                    copy(file, dstfile, prog);
-
-                                    /*
-                                    WriteVerbose(String.Format("{0} -> {1}\n", relfile, absdst));
-                                    WriteVerbose(e.Message);
-                                    WriteVerbose(e.StackTrace);
-
-                                    ErrorRecord er = new ErrorRecord(e, "CopyNew", ErrorCategory.InvalidOperation, null);
-                                    WriteError(er);
-
-                                    WriteDebug(e.Message);
-                                    WriteDebug(e.StackTrace);
-                                    WriteDebug("COPY NEW Exception");
-                                    */
-                                }
+							    Match me = Regex.Match(file,m);
+							    if (me.Success) { include = false; }
+                                // if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = false; }
                             }
-                            //optional sync attributes and dates
+                        }
+// basic rsync options (-a) assumed to always be active
+// recursive
+// copy links (maybe difficult for windows, symlinks are privileged)
+// preserve permissions (attributes & acl) or if implementing -Extended attributes only
+// preserve times
+// preserve group
+// preserve owner 
+// Devices (N/A)
 
-                            dst.SetInfo(dstfile, srcInfo);
-                            // copy acl 
-                        }
-                        catch (Exception e)
+// TODO: (these are possible options that could be implemented relatively easily)
+// going to put future implementable options here
+// -Checksum copy based on checksum not date/size
+// -Update skip newer files in destination
+// -inplace (normal operation is to write to temporary file and rename)
+// -WhatIf (aka dry run)
+// -Whole don't perform block check
+// - don't cross reparse points
+// checksum block size
+// -Delete (delete files that only exist in the destination)
+// -minSize / -maxsize
+// -compress (maybe)
+// -Extended (acl)
+                        count++;
+                        if (include)
                         {
-                            //WriteWarning("FAILED : " + file + " : " + e.Message);
-                            // WriteVerbose(e.StackTrace);
-                            ErrorRecord er = new ErrorRecord(e, "FileCopy", ErrorCategory.ReadError, null);
-                            WriteError(er);
-                        }
-                        if (progress && !this.MyInvocation.BoundParameters.ContainsKey("Verbose"))
-                        {
-                            prog.PercentComplete = 100;
-                            prog.StatusDescription = String.Format("Copying {0}/{1}", count, filelist.Count);
-                            WriteProgress(prog);
+                            if (progress)
+                                prog = new ProgressRecord(1, file, "Copying");
+
+                           // Console.WriteLine("src: {0}",file);
+                            WriteVerbose(file);
+                            SyncStat srcType = cdir.GetInfo(file);  // relative from src basepath
+                            if (srcType.isDir())
+                            {
+                               // Console.WriteLine ("MKDIR: {0}",dst.DestinationCombine(file));
+                                dst.MakeDir(file);
+                            } else {
+                               // Console.WriteLine( "COPY TO: {0}",dst.DestinationCombine(file));
+                               //dst.copyfrom(cdir,file,prog);
+                                copy(file,cdir,file,dst,prog);
+                            }
                         }
                     }
-                }
+                }    
             }
             catch (Exception e)
             {
