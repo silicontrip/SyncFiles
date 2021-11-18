@@ -310,10 +310,11 @@ namespace net.ninebroadcast
 // recursive
 // copy links (maybe difficult for windows, symlinks are privileged)
 // preserve permissions (attributes & acl) or if implementing -Extended attributes only
-// preserve times
+// preserve times; System.IO.File.GetAttributes(path) FileSystemInfo
 // preserve group
 // preserve owner 
 // Devices (N/A)
+
 
 // TODO: (these are possible options that could be implemented relatively easily)
 // going to put future implementable options here
