@@ -18,6 +18,12 @@ namespace net.ninebroadcast
     [Cmdlet(VerbsData.Sync, "ChildItem")]
     public class SyncPathCommand : PSCmdlet
     {
+
+        public
+        SyncPathCommand()
+        {
+        }
+
         // Declare the parameters for the cmdlet.
         [Alias("FullName")]
         [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
@@ -107,15 +113,29 @@ namespace net.ninebroadcast
 
             foreach (string p in path)
             {
+                WriteDebug(String.Format("Expanding: {0}",p));
                 Collection<string> expath;
+
                 if (session != null)
                 {
                     expath = RemoteIO.ExpandPath(p,session);
                 } else {
+/*
+			        string cur = this.SessionState.Path.CurrentFileSystemLocation.ToString();
+
+			        string pp = System.IO.Path.Combine(cur, p);
+
+                    WriteDebug(String.Format("combine: {0}",pp));
+
+    			    string cpath = System.IO.Path.GetDirectoryName(pp);
+	    		    string card = System.IO.Path.GetFileName(pp);
+
+                    WriteDebug(String.Format("path: {0} card: {1}",cpath,card));
+*/
                     expath = LocalIO.ExpandPath(p,this.SessionState);
                 }
 
-			// Console.WriteLine ("expanded from path: {0} -> {1} ",p,String.Join(", ",expath));
+			WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
 
                 // expath should all be absolute
                 foreach (string ep in expath)
@@ -134,12 +154,12 @@ namespace net.ninebroadcast
                 }
 
             }
+            WriteDebug("IOFactory exit.");
             return new Collection<IO> (src);
         }
 
         // private void copy(IO src,string srcFile, IO dst, string dstFile, ProgressRecord prog)
-                private void copy(string srcFile, IO src, string dstFile, IO dst, ProgressRecord prog)
-
+        private void copy(string srcFile, IO src, string dstFile, IO dst, ProgressRecord prog)
         {
 
             Int64 bytesxfered = 0;
@@ -154,8 +174,8 @@ namespace net.ninebroadcast
             } catch {
 				dstInfo = new SyncStat();
             }
-  //          do some clever compare
 
+            // do some clever compare
             // src date newer dst date
             // src size != dst size
             // src chksum != dst chksum
@@ -225,11 +245,13 @@ namespace net.ninebroadcast
                // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
                 if (fromsession != null)
                 {
+                    WriteDebug("From Session:");
                     src= IOFactory (fromsession,path);
                 }
                 else
                 {
                    // Console.WriteLine("src local: {0}",target);
+                     WriteDebug("local path:");
                     src = IOFactory(null,path);
                 }
 
@@ -238,13 +260,13 @@ namespace net.ninebroadcast
 				string[] ta = new string[] {target};
                 if (tosession != null)
                 {
-                  //  Console.WriteLine("dst remote: {0}",target);
+                    WriteDebug(String.Format("dst remote: {0}",target));
                     //dst = new RemoteIO(tosession,target);
 					tdst = IOFactory(tosession,ta);
                 }
                 else
                 {
-                  //  Console.WriteLine("dst local: {0}",target);
+                    WriteDebug(String.Format("dst local: {0}",target));
                     //dst = new LocalIO(this.SessionState,target);
 					tdst = IOFactory(null,ta);
                 }
@@ -288,10 +310,11 @@ namespace net.ninebroadcast
 // recursive
 // copy links (maybe difficult for windows, symlinks are privileged)
 // preserve permissions (attributes & acl) or if implementing -Extended attributes only
-// preserve times
+// preserve times; System.IO.File.GetAttributes(path) FileSystemInfo
 // preserve group
 // preserve owner 
 // Devices (N/A)
+
 
 // TODO: (these are possible options that could be implemented relatively easily)
 // going to put future implementable options here

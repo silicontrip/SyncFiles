@@ -8,6 +8,7 @@ using System.Management.Automation.Runspaces;
 using System.Runtime.InteropServices;
 using System.Security;
 
+
 namespace net.ninebroadcast
 {
 	public interface IO
@@ -166,6 +167,7 @@ namespace net.ninebroadcast
 
 // should move from session to cwd
 		public Collection<string> ExpandPath (string pp) { return ExpandPath(pp,session); }
+		
 		public static Collection<string> ExpandPath (string pp, SessionState sess) 
 		{
 
@@ -175,7 +177,7 @@ namespace net.ninebroadcast
 			string path = Path.GetDirectoryName(pp);
 			string card = Path.GetFileName(pp);
 
-           // Console.WriteLine("path: {0} card: {1}",path,card);
+          // Cmdlet.WriteDebug(String.Format("path: {0} card: {1}",path,card));
 
             string[] fse = Directory.GetFileSystemEntries(path,card);
             return new Collection<string>(fse);
