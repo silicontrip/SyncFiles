@@ -252,8 +252,8 @@ namespace net.ninebroadcast
                 }
                 else
                 {
-                   // Console.WriteLine("src local: {0}",target);
-                     WriteDebug("local path.");
+                    // Console.WriteLine("src local: {0}",target);
+                    // WriteDebug("local path.");
                     src = IOFactory(null,path);
                 }
 

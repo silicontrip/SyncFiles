@@ -173,17 +173,17 @@ namespace net.ninebroadcast
 
 			string cur = sess.Path.CurrentFileSystemLocation.ToString();
 			// Console.WriteLine(String.Format("LocalIO ExpandPath current: {0}",cur));
-			pp = Path.Combine(cur, pp);
-			Console.WriteLine(String.Format("LocalIO ExpandPath combine: {0}",pp));
+			string p2 = Path.Combine(cur, pp);
+			Console.WriteLine(String.Format("LocalIO ExpandPath combine: {0}",p2));
 
-			string path = Path.GetDirectoryName(pp);
+			string path = Path.GetDirectoryName(p2);
 			//Console.WriteLine(String.Format("LocalIO ExpandPath basedir: {0}",path));
 
-			string card = Path.GetFileName(pp);
+			string card = Path.GetFileName(p2);
 			//Console.WriteLine(String.Format("LocalIO ExpandPath file: {0}",card));
 
           Console.WriteLine(String.Format("path: {0} card: {1}",path,card));
-			string[] fse = {pp};
+			string[] fse = {p2};
 			try {
 	            fse = Directory.GetFileSystemEntries(path,card);  // have to work out what this returns under different scenarios.
 //				Console.WriteLine("Got try fse");
