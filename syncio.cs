@@ -187,7 +187,8 @@ namespace net.ninebroadcast
 			try {
 	            fse = Directory.GetFileSystemEntries(path,card);
 				Console.WriteLine("Got try fse");
-				Console.WriteLine(String.Format("LocalIO ExpandPath try GetFileSystemEntries : {0}",fse));
+				Console.WriteLine(String.Format("fse size: {0}",fse.Length));
+				// Console.WriteLine(String.Format("LocalIO ExpandPath try GetFileSystemEntries : {0}",fse));
 			} catch (DirectoryNotFoundException e) {
 
 				Console.WriteLine("dir not found exception");
