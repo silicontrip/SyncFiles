@@ -271,6 +271,11 @@ namespace net.ninebroadcast
 					tdst = IOFactory(null,ta);
                 }
 
+                // going to work around the . expanding to .\*
+                foreach (IO destination in tdst)
+                    WriteDebug(destination.ToString());
+
+
 				if (tdst.Count > 1)
 					throw  new ArgumentException("Ambiguous destination.","Target");
 
