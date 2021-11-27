@@ -182,7 +182,7 @@ namespace net.ninebroadcast
 			string card = Path.GetFileName(pp);
 			//Console.WriteLine(String.Format("LocalIO ExpandPath file: {0}",card));
 
-          // Cmdlet.WriteDebug(String.Format("path: {0} card: {1}",path,card));
+          Console.WriteLine(String.Format("path: {0} card: {1}",path,card));
 			string[] fse = {pp};
 			try {
 	            fse = Directory.GetFileSystemEntries(path,card);
