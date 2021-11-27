@@ -198,6 +198,8 @@ namespace net.ninebroadcast
 
 			} catch (Exception e) {
 				Console.WriteLine(String.Format("LocalIO ExpandPath Exception."));
+				Console.WriteLine(String.Format("LocalIO ExpandPath Exception message: {0}",e.Message));
+				Console.WriteLine(String.Format("LocalIO ExpandPath Exception trace: {0}",e.StackTrace));
 
 				throw e;
 			}
