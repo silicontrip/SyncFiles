@@ -174,7 +174,7 @@ namespace net.ninebroadcast
 			string cur = sess.Path.CurrentFileSystemLocation.ToString();
 			// Console.WriteLine(String.Format("LocalIO ExpandPath current: {0}",cur));
 			pp = Path.Combine(cur, pp);
-			//Console.WriteLine(String.Format("LocalIO ExpandPath combine: {0}",pp));
+			Console.WriteLine(String.Format("LocalIO ExpandPath combine: {0}",pp));
 
 			string path = Path.GetDirectoryName(pp);
 			//Console.WriteLine(String.Format("LocalIO ExpandPath basedir: {0}",path));

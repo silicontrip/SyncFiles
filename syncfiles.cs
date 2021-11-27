@@ -137,6 +137,8 @@ namespace net.ninebroadcast
                 WriteDebug (String.Format("expanded path count: {0}",expath.Count));
 			WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
 
+            // so what causes a 0 length ExpandPath.
+
                 // expath should all be absolute
                 foreach (string ep in expath)
                 {
