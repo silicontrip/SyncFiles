@@ -189,6 +189,8 @@ namespace net.ninebroadcast
 			} catch (DirectoryNotFoundException e) {
 
 				Directory.CreateDirectory(path);
+				fse = Directory.GetFileSystemEntries(path,card);
+
 				// Console.WriteLine(String.Format("LOCALIO GetFileSystemEntries Exception: {0}",e.Message));
 			} catch (Exception e) {
 				throw e;
