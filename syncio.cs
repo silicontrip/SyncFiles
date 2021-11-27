@@ -185,14 +185,20 @@ namespace net.ninebroadcast
           Console.WriteLine(String.Format("path: {0} card: {1}",path,card));
 			string[] fse = {pp};
 			try {
-	            fse = Directory.GetFileSystemEntries(path,card);
-				Console.WriteLine("Got try fse");
-				Console.WriteLine(String.Format("fse size: {0}",fse.Length));
+	            fse = Directory.GetFileSystemEntries(path,card);  // have to work out what this returns under different scenarios.
+//				Console.WriteLine("Got try fse");
+//				Console.WriteLine(String.Format("fse size: {0}",fse.Length));
 				// Console.WriteLine(String.Format("LocalIO ExpandPath try GetFileSystemEntries : {0}",fse));
+
+				if (fse.Length == 0)
+				{
+					Directory.CreateDirectory(path);
+					fse = Directory.GetFileSystemEntries(path,card);
+				}
+
 			} catch (DirectoryNotFoundException e) {
 
 				Console.WriteLine("dir not found exception");
-
 
 				Console.WriteLine(String.Format("LocalIO ExpandPath makedir: {0}",path));
 
