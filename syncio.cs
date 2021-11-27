@@ -183,11 +183,16 @@ namespace net.ninebroadcast
 			Console.WriteLine(String.Format("LocalIO ExpandPath file: {0}",card));
 
           // Cmdlet.WriteDebug(String.Format("path: {0} card: {1}",path,card));
+<<<<<<< HEAD
 			try {
 	            string[] fse = Directory.GetFileSystemEntries(path,card);
 			} catch (Exception e) {
 				Console.WriteLine(String.Format("LOCALIO GetFileSystemEntries Exception: {0}",e.Message));
 			}
+=======
+
+            string[] fse = Directory.GetFileSystemEntries(path,card);
+>>>>>>> b5559446bdb65443f04addd7e6c165b5ead96a2c
 			Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
 
             return new Collection<string>(fse);
