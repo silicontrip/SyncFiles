@@ -358,8 +358,7 @@ namespace net.ninebroadcast
             }
             catch (Exception e)
             {
-                WriteWarning("Fatal Error");
-                WriteDebug(e.Message);
+                WriteWarning(String.Format("Fatal Error: {0}",e.Message));
                 WriteDebug(e.StackTrace);
                 ErrorRecord er = new ErrorRecord(e, "TopLevel", ErrorCategory.ObjectNotFound, null);
                 WriteError(er);
