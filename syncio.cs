@@ -172,14 +172,21 @@ namespace net.ninebroadcast
 		{
 
 			string cur = sess.Path.CurrentFileSystemLocation.ToString();
+			WriteDebug("LocalIO ExpandPath current: {0}",cur);
 			pp = Path.Combine(cur, pp);
+			WriteDebug("LocalIO ExpandPath combine: {0}",pp);
 
 			string path = Path.GetDirectoryName(pp);
+						WriteDebug("LocalIO ExpandPath basedir: {0}",path);
+
 			string card = Path.GetFileName(pp);
+						WriteDebug("LocalIO ExpandPath file: {0}",card);
 
           // Cmdlet.WriteDebug(String.Format("path: {0} card: {1}",path,card));
 
             string[] fse = Directory.GetFileSystemEntries(path,card);
+								WriteDebug("LocalIO ExpandPath GetFileSystemEntries: {0}",fse);
+
             return new Collection<string>(fse);
 
 		}
