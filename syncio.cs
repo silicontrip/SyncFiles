@@ -172,25 +172,29 @@ namespace net.ninebroadcast
 		{
 
 			string cur = sess.Path.CurrentFileSystemLocation.ToString();
-			Console.WriteLine(String.Format("LocalIO ExpandPath current: {0}",cur));
+			// Console.WriteLine(String.Format("LocalIO ExpandPath current: {0}",cur));
 			pp = Path.Combine(cur, pp);
-			Console.WriteLine(String.Format("LocalIO ExpandPath combine: {0}",pp));
+			//Console.WriteLine(String.Format("LocalIO ExpandPath combine: {0}",pp));
 
 			string path = Path.GetDirectoryName(pp);
-			Console.WriteLine(String.Format("LocalIO ExpandPath basedir: {0}",path));
+			//Console.WriteLine(String.Format("LocalIO ExpandPath basedir: {0}",path));
 
 			string card = Path.GetFileName(pp);
-			Console.WriteLine(String.Format("LocalIO ExpandPath file: {0}",card));
+			//Console.WriteLine(String.Format("LocalIO ExpandPath file: {0}",card));
 
           // Cmdlet.WriteDebug(String.Format("path: {0} card: {1}",path,card));
 			string[] fse = {pp};
-
 			try {
 	            fse = Directory.GetFileSystemEntries(path,card);
+			} catch (DirectoryNotFoundException e) {
+
+				Directory.CreateDirectory(path);
+				// Console.WriteLine(String.Format("LOCALIO GetFileSystemEntries Exception: {0}",e.Message));
 			} catch (Exception e) {
-				Console.WriteLine(String.Format("LOCALIO GetFileSystemEntries Exception: {0}",e.Message));
+				throw e;
 			}
-			Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
+
+			// Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
 
             return new Collection<string>(fse);
 
