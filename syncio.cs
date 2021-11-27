@@ -186,13 +186,19 @@ namespace net.ninebroadcast
 			string[] fse = {pp};
 			try {
 	            fse = Directory.GetFileSystemEntries(path,card);
+				Console.WriteLine(String.Format("LocalIO ExpandPath try GetFileSystemEntries : {0}",fse));
 			} catch (DirectoryNotFoundException e) {
+				Console.WriteLine(String.Format("LocalIO ExpandPath makedir: {0}",path));
 
 				Directory.CreateDirectory(path);
 				fse = Directory.GetFileSystemEntries(path,card);
 
 				// Console.WriteLine(String.Format("LOCALIO GetFileSystemEntries Exception: {0}",e.Message));
+				Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
+
 			} catch (Exception e) {
+				Console.WriteLine(String.Format("LocalIO ExpandPath Exception."));
+
 				throw e;
 			}
 
