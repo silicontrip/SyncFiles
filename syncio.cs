@@ -194,6 +194,7 @@ namespace net.ninebroadcast
 				{
 					Directory.CreateDirectory(path);
 					fse = Directory.GetFileSystemEntries(path,card);
+					Console.WriteLine(String.Format("make dir fse size: {0}",fse.Length));
 				}
 
 			} catch (DirectoryNotFoundException e) {

@@ -134,7 +134,7 @@ namespace net.ninebroadcast
 */
                     expath = LocalIO.ExpandPath(p,this.SessionState);
                 }
-
+                WriteDebug (String.Format("expanded path count: {0}",expath.Count));
 			WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
 
                 // expath should all be absolute
