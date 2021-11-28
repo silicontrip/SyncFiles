@@ -120,24 +120,15 @@ namespace net.ninebroadcast
                 {
                     expath = RemoteIO.ExpandPath(p,session);
                 } else {
-/*
-			        string cur = this.SessionState.Path.CurrentFileSystemLocation.ToString();
-
-			        string pp = System.IO.Path.Combine(cur, p);
-
-                    WriteDebug(String.Format("combine: {0}",pp));
-
-    			    string cpath = System.IO.Path.GetDirectoryName(pp);
-	    		    string card = System.IO.Path.GetFileName(pp);
-
-                    WriteDebug(String.Format("path: {0} card: {1}",cpath,card));
-*/
                     expath = LocalIO.ExpandPath(p,this.SessionState);
                 }
                 WriteDebug (String.Format("expanded path count: {0}",expath.Count));
-			WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
+			// WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
 
             // so what causes a 0 length ExpandPath.
+			// sould've been obvious, a non existent path
+
+					// We don't know if this is a source or destination path, in order to handle non existant paths
 
                 // expath should all be absolute
                 foreach (string ep in expath)
@@ -274,14 +265,45 @@ namespace net.ninebroadcast
                 }
 
                 // going to work around the . expanding to .\*
-                foreach (IO destination in tdst)
-                    WriteDebug(destination.ToString());
+               // foreach (IO destination in tdst)
+               //     WriteDebug(destination.ToString());
 
+				/* ARGUMENT LOGIC
 
-				if (tdst.Count > 1)
+				due to arguments passed in beyond our control, destination file will not be reliable.
+
+				DESTINATION; Direcory or not exist
+				(ignore the following allowed matrix)
+
+				we also must check for multiple sources 
+				Source: exist single file.  Destination: existing file, existing directory, non existing directory (makedir).
+
+				Source: exist single directory.  Destination: directory.
+
+				Source: exist files & directories
+				*/
+
+				if (tdst.Count == 0)
+				{
+					// dst = new IO ();
+					if (tosession != null)
+					{
+						WriteDebug(String.Format("dst remote: {0}",target));
+						dst = new RemoteIO(tosession,target);
+						dst.MakeDir(target);
+					}
+					else
+					{
+						WriteDebug(String.Format("dst local: {0}",target));
+						dst = new LocalIO(this.SessionState,target);
+						dst.MakeDir(target);
+					}
+				}
+				else if (tdst.Count == 1)
+					dst = tdst[0];
+				else 
 					throw  new ArgumentException("Ambiguous destination.","Target");
 
-				dst = tdst[0];
 
                 int count = 0;
                 foreach (IO cdir in src)
