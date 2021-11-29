@@ -569,16 +569,21 @@ namespace net.ninebroadcast
 			Collection<PSObject> ol = pipe.Invoke();
 
 			pipe.Dispose();
+			/*
 			if (ol.Count == 1)
 			{
 				//Console.WriteLine(ol[0].GetType)
 				foreach (PSMemberInfo pmi in ol[0].Members)
-					Console.WriteLine(pmi.Name + " -> "+pmi.Value);
+					Console.WriteLine("(" + pmi.GetType() + ") " +pmi.Name + " -> "+pmi.Value);
 
 				DirectoryInfo di = (DirectoryInfo)ol[0].BaseObject;
 				return di;
 			}
+			*/
 			// this should never happen
+			// well I give up unwrapping the object for the moment.
+			// until then, this will always happen.
+			// do we even use directory info anyway?
 			return null;
 		}
 
