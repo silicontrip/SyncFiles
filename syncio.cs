@@ -571,14 +571,10 @@ namespace net.ninebroadcast
 			pipe.Dispose();
 			if (ol.Count == 1)
 			{
-<<<<<<< HEAD
 				foreach (PSMemberInfo pmi in ol[0].Members)
-=======
-				foreach (PSMemberInfo pmi in ol.Members)
->>>>>>> 75ecf138a6acf392e6f59010f9a51e0bd6ca19b8
 					Console.WriteLine(pmi.Name);
 
-				DirectoryInfo di = ol[0].BaseObject;
+				DirectoryInfo di = (DirectoryInfo)ol[0].BaseObject;
 				return di;
 			}
 			// this should never happen
