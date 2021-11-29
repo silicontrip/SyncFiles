@@ -573,7 +573,7 @@ namespace net.ninebroadcast
 			{
 				//Console.WriteLine(ol[0].GetType)
 				foreach (PSMemberInfo pmi in ol[0].Members)
-					Console.WriteLine(pmi.Name + " -> "+pmi.Value);
+					Console.WriteLine("(" + pmi.GetType() + ") " +pmi.Name + " -> "+pmi.Value);
 
 				DirectoryInfo di = (DirectoryInfo)ol[0].BaseObject;
 				return di;
