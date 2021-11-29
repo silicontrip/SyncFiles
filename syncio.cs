@@ -566,10 +566,17 @@ namespace net.ninebroadcast
 			Pipeline pipe = session.Runspace.CreatePipeline();
 
 			pipe.Commands.AddScript(command);
-			Collection<PSObject> di = pipe.Invoke();
+			Collection<PSObject> ol = pipe.Invoke();
+
 			pipe.Dispose();
-			if (di.Count == 1)
-				return (DirectoryInfo)di[0].BaseObject;
+			if (ol.Count == 1)
+			{
+				foreach (PSMemberInfo pmi in ol.Members)
+					Console.WriteLine(pmi.Name);
+
+				DirectoryInfo di = ol[0].BaseObject;
+				return di;
+			}
 			// this should never happen
 			return null;
 		}
