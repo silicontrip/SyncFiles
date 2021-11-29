@@ -17,8 +17,11 @@ namespace net.ninebroadcast
 		// all paths should be relative to abspath.
 		Collection<string> ReadDir(string p);
 		Collection<string> ReadDir();
+
 		DirectoryInfo MakeDir(string p);
 		DirectoryInfo MakeAbsDir(string p);
+		string ElementPath();
+
 
 		SyncStat GetInfo(string p);
 		void SetInfo(string p, SyncStat f);
@@ -31,7 +34,10 @@ namespace net.ninebroadcast
 		string SourceCombine(string p);
         string DestinationCombine(string p);
 
-		void SetPath(string p);
+		// void SetPath(string p);
+		void SetBasePath(string p);
+		void SetElementPath(string p);
+
 		string AbsPath();
 		bool IsDir();
 		Collection<string> GetDirs(string p);
@@ -50,11 +56,23 @@ namespace net.ninebroadcast
 
 	   // private String remoteUNC = null;
 
-		public LocalIO (SessionState ss) { this.session = ss; this.SetPath(@"./"); }
-		public LocalIO (SessionState ss, String pp) { this.session=ss; this.SetPath(pp); }
+		public LocalIO (SessionState ss) { 
+			this.session = ss; 
+			this.SetPath(@"./"); 
+		}
+
+
+		public LocalIO (SessionState ss, String base, string element) { 
+			this.session=ss; 
+
+			FileAttributes fa = File.GetAttributes(p);
+			return (( fa & FileAttributes.Directory) != 0); 
+
+			this.SetPath(pp);
+
+		}
 
 		public string AbsPath() { return Path.Combine(this.abspath,this.element); }
-
 		public string GetCwd() { return this.session.Path.CurrentFileSystemLocation.ToString(); } 
 
 		public string SourceCombine(string p) { 
@@ -70,14 +88,32 @@ namespace net.ninebroadcast
             return Path.Combine(this.abspath, this.element, p);
         }
 
+		public string ElementPath() { return this.element; }
+
 		/// <summary>
 		/// sets the IO base path.  works with relative or absolute paths. (stored as absolute)
 		/// </summary>
 		/// <param>Path relative or absolute</param>
-		public void SetPath(string p) {
-            string apath = Path.Combine(session.Path.CurrentFileSystemLocation.ToString(), p);
+
+		public void SetSource (string pp) { 
+            string apath = Path.Combine(this.cwd,pp); 
             this.abspath = Path.GetDirectoryName(apath);
             this.element = Path.GetFileName(apath);
+        }
+
+
+		public void SetPath(string b, string e) {
+
+// Path logic
+// path absolute:  source abs =  GetDirectoryName(p) element = getFilename(p)
+// path rel: source abs = DirName (make abs) 
+
+// destination abs: abs = abs, element=""
+// rel: abs=combine element = ""
+
+            this.abspath = Path.Combine(session.Path.CurrentFileSystemLocation.ToString(), b);
+            // this.abspath = Path.GetDirectoryName(apath);
+            this.element = Path.GetFileName(e);
 		}
 
 		public bool IsDir() { 
@@ -93,11 +129,6 @@ namespace net.ninebroadcast
 		///<summary>gets list of files for IO basepath</summary>
 		public Collection<String> ReadDir() { return this.ReadDir(""); }
 
-		// because "get all directories recursively" may explode if it encounters a permission denied and return NOTHING.
-		/// <summary>Returns a list of files made by recursively reading from path</summary>
-		/// <param>path to get</param>
-		/// <returns>Collection of files relative<returns>
-
 		private static string makerel( Uri fromRoot, string toPath)
 		{
 			Uri feUri = new Uri (toPath);
@@ -106,6 +137,11 @@ namespace net.ninebroadcast
 			string relPath = Uri.UnescapeDataString(rel.ToString());
 			return relPath.Replace(System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.DirectorySeparatorChar);
 		}
+
+		// because "get all directories recursively" may explode if it encounters a permission denied and return NOTHING.
+		/// <summary>Returns a list of files made by recursively reading from path</summary>
+		/// <param>path to get</param>
+		/// <returns>Collection of files relative<returns>
 
 		public Collection<string> ReadDir(string lp) // I really don't think there needs to be an argument based readdir
 		{
@@ -120,19 +156,21 @@ namespace net.ninebroadcast
 			if (!this.IsDir())
 			{
 			   // Console.WriteLine("returning file.");
-				fl.Add(Path.GetFileName(this.AbsPath()));
+				// fl.Add(Path.GetFileName(this.AbsPath()));   // wrong 
+				fl.Add(this.ElementPath());
 				return new Collection<string>(fl);
 			}
 
             // string parent = Path.GetDirectoryName(this.abspath);
 		    // Uri fromRoot = new Uri (parent  + "/");
 
-			Uri fromRoot = new Uri (this.abspath + "/");
+			// Uri fromRoot = new Uri (this.abspath + "/");
 
             // as I want the last element included in the relative path.
             string searchRoot = this.DestinationCombine(lp);
 			dl.Add(searchRoot);
-			fl.Add(makerel(fromRoot,searchRoot));
+			// fl.Add(makerel(fromRoot,searchRoot));
+			fl.Add(Path.GetRelativePath(this.abspath,searchRoot));
 
 			while (dl.Count > 0)
 			{
@@ -143,6 +181,9 @@ namespace net.ninebroadcast
 
 					foreach (string fe in tfl)
 					{
+
+						Console.WriteLine("root: " + fromRoot + ". File Entry: "+fe);
+
 						FileAttributes fa = File.GetAttributes(fe);
 						if ((fa & FileAttributes.Directory) != 0)
 							dl.Add(fe);
@@ -408,15 +449,15 @@ namespace net.ninebroadcast
 		{
 			this.session = s;
 			this.cwd = GetRemoteCWD(s);
-            this.SetPath("");
+            this.SetPath("","");
 
 		}
 
-		public RemoteIO(PSSession s, string pp)
+		public RemoteIO(PSSession s, string pp, string ee)
 		{
 			this.session = s;
 			this.cwd = GetRemoteCWD(s);
-			this.SetPath(pp);
+			this.SetPath(pp,ee);
 
 		}
 
@@ -437,12 +478,29 @@ namespace net.ninebroadcast
 		public string GetCwd() { return this.cwd; }
 		public string SourceCombine(string p) { return System.IO.Path.Combine(this.abspath,p); }
         public string DestinationCombine(string p) { return System.IO.Path.Combine(this.abspath,this.element,p); }
+		public string ElementPath() { return this.element; }
 
-		public void SetPath (string pp) { 
+
+		public void SetSource (string pp) { 
             string apath = Path.Combine(this.cwd,pp); 
             this.abspath = Path.GetDirectoryName(apath);
             this.element = Path.GetFileName(apath);
         }
+
+		public void SetPath(string b, string e) {
+
+// Path logic
+// path absolute:  source abs =  GetDirectoryName(p) element = getFilename(p)
+// path rel: source abs = DirName (make abs) 
+
+// destination abs: abs = abs, element=""
+// rel: abs=combine element = ""
+
+            this.abspath = Path.Combine(this.cwd, b);
+            // this.abspath = Path.GetDirectoryName(apath);
+            this.element = e; // this should never be absolute
+		}
+
 		public string AbsPath() { return Path.Combine(this.abspath,this.element); }
 		public Collection<String> ReadDir() { return this.ReadDir(""); }
 

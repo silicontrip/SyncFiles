@@ -107,44 +107,43 @@ namespace net.ninebroadcast
         }
         private string[] includeList;
 
-    private Collection<IO> IOFactory(PSSession session,string[] path)
+        private Collection<IO> IOFactory(PSSession session,string basepath, string element)
         {
             List<IO> src = new List<IO>();
-
-            foreach (string p in path)
-            {
                 //WriteDebug(String.Format("Expanding: {0}",p));
-                Collection<string> expath;
+            Collection<string> expath;
 
+            string cpath = Path.Combine(basepath, element);
+
+            if (session != null)
+            {
+                expath = RemoteIO.ExpandPath(cpath,session);
+            } else {
+                expath = LocalIO.ExpandPath(cpath,this.SessionState);
+            }
+
+            //WriteDebug (String.Format("expanded path count: {0}",expath.Count));
+			// WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
+            // so what causes a 0 length ExpandPath.
+            // sould've been obvious, a non existent path
+            // We don't know if this is a source or destination path, in order to handle non existant paths
+            // expath should all be absolute
+
+            foreach (string ep in expath)
+            {
+                //WriteDebug(String.Format("Expanded: {0}",ep));
                 if (session != null)
                 {
-                    expath = RemoteIO.ExpandPath(p,session);
-                } else {
-                    expath = LocalIO.ExpandPath(p,this.SessionState);
+                    //WriteDebug(String.Format("Remote add: {0}",ep));
+                    src.Add( new RemoteIO(session,ep));
                 }
-                //WriteDebug (String.Format("expanded path count: {0}",expath.Count));
-			        // WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
-                    // so what causes a 0 length ExpandPath.
-			        // sould've been obvious, a non existent path
-					// We don't know if this is a source or destination path, in order to handle non existant paths
-                    // expath should all be absolute
-
-                foreach (string ep in expath)
+                else
                 {
-                    //WriteDebug(String.Format("Expanded: {0}",ep));
-                    if (session != null)
-                    {
-		                //WriteDebug(String.Format("Remote add: {0}",ep));
-                        src.Add( new RemoteIO(session,ep));
-                    }
-                    else
-                    {
-		                //WriteDebug(String.Format("local add: {0}",ep));
-                        src.Add( new LocalIO(this.SessionState,ep));
-                    }
+                    //WriteDebug(String.Format("local add: {0}",ep));
+                    src.Add( new LocalIO(this.SessionState,ep));
                 }
-
             }
+
             //WriteDebug("IOFactory exit.");
             return new Collection<IO> (src);
         }
@@ -233,40 +232,47 @@ namespace net.ninebroadcast
             ProgressRecord prog = null;
             try
             {
-                // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
-                if (fromsession != null)
+                foreach (string p in path)
                 {
-                    //WriteDebug("From Session:");
-                    src= IOFactory (fromsession,path);
-                }
-                else
-                {
-                    // Console.WriteLine("src local: {0}",target);
-                    // WriteDebug("local path.");
-                    src = IOFactory(null,path);
-                }
+                    // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
 
+                    string fbase = System.IO.Path.GetDirectoryName(p);
+                    string felem = System.IO.Path.GetFileName(p);
+
+                    if (fromsession != null)
+                    {
+                        //WriteDebug("From Session:");
+                        src= IOFactory (fromsession,fbase,felem);
+                    }
+                    else
+                    {
+                        // Console.WriteLine("src local: {0}",target);
+                        // WriteDebug("local path.");
+                        src = IOFactory(null,fbase,felem);
+                    }
+                }
                 if (src.Count == 0)
                     throw new FileNotFoundException(path[0]);
 
-                foreach (IO selm in src)
-                    WriteDebug("source element:" + selm.AbsPath());
+                //foreach (IO selm in src)
+                //    WriteDebug("source element:" + selm.AbsPath());
 
-              //  WriteDebug("source path: " + path[0] + " :: " + src[0].AbsPath());
+                //  WriteDebug("source path: " + path[0] + " :: " + src[0].AbsPath());
 
-            // target should not be expandable
-            // well only if it expands into 1 item
-				string[] ta = new string[] {target};
+                // target should not be expandable
+                // well only if it expands into 1 item
+
+				// string[] ta = new string[] {target};
                 if (tosession != null)
                 {
                     //WriteDebug(String.Format("dst remote: {0}",target));
-					tdst = IOFactory(tosession,ta);
+					tdst = IOFactory(tosession,target,"");
 
                 }
                 else
                 {
                     //WriteDebug(String.Format("dst local: {0}",target));
-					tdst = IOFactory(null,ta);
+					tdst = IOFactory(null,target,"");
 
                 }
 
@@ -326,6 +332,8 @@ namespace net.ninebroadcast
                 {
                     // I wonder if single files also have this issue
                     WriteDebug("foreach source: " + cdir.AbsPath());
+
+                    // this must return relative (to argument) path
                     Collection<string> dd = cdir.ReadDir();
 
                     if (cdir.IsDir())
@@ -357,6 +365,7 @@ namespace net.ninebroadcast
                                 // if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = false; }
                             }
                         }
+
 // basic rsync options (-a) assumed to always be active
 // recursive
 // copy links (maybe difficult for windows, symlinks are privileged)
