@@ -17,7 +17,9 @@ namespace net.ninebroadcast
 		// all paths should be relative to abspath.
 		Collection<string> ReadDir(string p);
 		Collection<string> ReadDir();
-		void MakeDir(string p);
+		DirectoryInfo MakeDir(string p);
+		DirectoryInfo MakeAbsDir(string p);
+
 		SyncStat GetInfo(string p);
 		void SetInfo(string p, SyncStat f);
 		byte[] ReadBlock(string p, Int64 block);  // this might need a file handle, windows open and close is quite expensive
@@ -52,7 +54,8 @@ namespace net.ninebroadcast
 		public LocalIO (SessionState ss, String pp) { this.session=ss; this.SetPath(pp); }
 
 		public string AbsPath() { return Path.Combine(this.abspath,this.element); }
-		public string GetCwd() { return session.Path.CurrentFileSystemLocation.ToString(); } 
+
+		public string GetCwd() { return this.session.Path.CurrentFileSystemLocation.ToString(); } 
 
 		public string SourceCombine(string p) { 
 			// Console.WriteLine("Combining: {0} + {1}",this.abspath,p);
@@ -81,7 +84,7 @@ namespace net.ninebroadcast
             return IsDir(this.AbsPath());
 		}
 
-        private bool IsDir(string p)
+        private static bool IsDir(string p)
         {
             FileAttributes fa = File.GetAttributes(p);
 			return (( fa & FileAttributes.Directory) != 0); 
@@ -241,13 +244,19 @@ namespace net.ninebroadcast
 			return pathList;
 		}
 
-		public void MakeDir(string p)
+// Should return stuff
+		public DirectoryInfo MakeDir(string p)
 		{
             // as the leaf element is removed from abspath, 
             // all destination operations must add it.
            // string apath = Path.Combine(this.AbsPath(), p);
            // System.IO.Directory.CreateDirectory(apath);
-			System.IO.Directory.CreateDirectory(this.DestinationCombine(p));
+			return System.IO.Directory.CreateDirectory(this.DestinationCombine(p));
+		}
+
+		public  DirectoryInfo MakeAbsDir(string p)
+		{
+			return System.IO.Directory.CreateDirectory(p);
 		}
 
 		public SyncStat GetInfo(string lp)
@@ -544,17 +553,25 @@ namespace net.ninebroadcast
 			return ret;
 		}
 
-		public void MakeDir(string lp)
+		public DirectoryInfo MakeDir(string lp)
 		{
 			string p = this.DestinationCombine(lp);
+			return this.MakeAbsDir(p);
+		}
+
+		public DirectoryInfo MakeAbsDir(string p)
+		{
 			string format = @"[System.IO.Directory]::CreateDirectory(""{0}"")";
 			string command = string.Format(format, p);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 
 			pipe.Commands.AddScript(command);
-			pipe.Invoke();
+			Collection<PSObject> di = pipe.Invoke();
 			pipe.Dispose();
-
+			if (di.Count == 1)
+				return (DirectoryInfo)di[0].BaseObject;
+			// this should never happen
+			return null;
 		}
 
 		public Collection<string> ExpandPath (string p) { return ExpandPath(p,session); }

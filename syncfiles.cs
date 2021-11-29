@@ -123,14 +123,12 @@ namespace net.ninebroadcast
                     expath = LocalIO.ExpandPath(p,this.SessionState);
                 }
                 WriteDebug (String.Format("expanded path count: {0}",expath.Count));
-			// WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
-
-            // so what causes a 0 length ExpandPath.
-			// sould've been obvious, a non existent path
-
+			        // WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
+                    // so what causes a 0 length ExpandPath.
+			        // sould've been obvious, a non existent path
 					// We don't know if this is a source or destination path, in order to handle non existant paths
+                    // expath should all be absolute
 
-                // expath should all be absolute
                 foreach (string ep in expath)
                 {
                     WriteDebug(String.Format("Expanded: {0}",ep));
@@ -235,7 +233,7 @@ namespace net.ninebroadcast
             ProgressRecord prog = null;
             try
             {
-               // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
+                // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
                 if (fromsession != null)
                 {
                     WriteDebug("From Session:");
@@ -254,14 +252,18 @@ namespace net.ninebroadcast
                 if (tosession != null)
                 {
                     WriteDebug(String.Format("dst remote: {0}",target));
-                    //dst = new RemoteIO(tosession,target);
 					tdst = IOFactory(tosession,ta);
+
+                //    if (tdst.Count == 0) {
+                //        dst = new RemoteIO(tosession,target);
+                //        RemoteIO.MakeDir(target);
+                 //   }
                 }
                 else
                 {
                     WriteDebug(String.Format("dst local: {0}",target));
-                    //dst = new LocalIO(this.SessionState,target);
 					tdst = IOFactory(null,ta);
+
                 }
 
                 // going to work around the . expanding to .\*
