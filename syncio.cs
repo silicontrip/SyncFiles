@@ -189,33 +189,26 @@ namespace net.ninebroadcast
 			string[] fse = {p2};
 			try {
 	            fse = Directory.GetFileSystemEntries(path,card);  // have to work out what this returns under different scenarios.
-//				Console.WriteLine("Got try fse");
-//				Console.WriteLine(String.Format("fse size: {0}",fse.Length));
-				// Console.WriteLine(String.Format("LocalIO ExpandPath try GetFileSystemEntries : {0}",fse));
 
 				if (fse.Length == 0)
 				{
 					Directory.CreateDirectory(path);
 					fse = Directory.GetFileSystemEntries(path,card);
-					Console.WriteLine(String.Format("make dir fse size: {0}",fse.Length));
+					//Console.WriteLine(String.Format("make dir fse size: {0}",fse.Length));
 				}
 
 			} catch (DirectoryNotFoundException e) {
-
-				Console.WriteLine("dir not found exception");
-
-				Console.WriteLine(String.Format("LocalIO ExpandPath makedir: {0}",path));
 
 				Directory.CreateDirectory(path);
 				fse = Directory.GetFileSystemEntries(path,card);
 
 				// Console.WriteLine(String.Format("LOCALIO GetFileSystemEntries Exception: {0}",e.Message));
-				Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
+				//Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
 
 			} catch (Exception e) {
-				Console.WriteLine(String.Format("LocalIO ExpandPath Exception."));
-				Console.WriteLine(String.Format("LocalIO ExpandPath Exception message: {0}",e.Message));
-				Console.WriteLine(String.Format("LocalIO ExpandPath Exception trace: {0}",e.StackTrace));
+				//Console.WriteLine(String.Format("LocalIO ExpandPath Exception."));
+				//Console.WriteLine(String.Format("LocalIO ExpandPath Exception message: {0}",e.Message));
+				//Console.WriteLine(String.Format("LocalIO ExpandPath Exception trace: {0}",e.StackTrace));
 
 				throw e;
 			}

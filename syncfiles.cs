@@ -113,7 +113,7 @@ namespace net.ninebroadcast
 
             foreach (string p in path)
             {
-                WriteDebug(String.Format("Expanding: {0}",p));
+                //WriteDebug(String.Format("Expanding: {0}",p));
                 Collection<string> expath;
 
                 if (session != null)
@@ -122,7 +122,7 @@ namespace net.ninebroadcast
                 } else {
                     expath = LocalIO.ExpandPath(p,this.SessionState);
                 }
-                WriteDebug (String.Format("expanded path count: {0}",expath.Count));
+                //WriteDebug (String.Format("expanded path count: {0}",expath.Count));
 			        // WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
                     // so what causes a 0 length ExpandPath.
 			        // sould've been obvious, a non existent path
@@ -131,21 +131,21 @@ namespace net.ninebroadcast
 
                 foreach (string ep in expath)
                 {
-                    WriteDebug(String.Format("Expanded: {0}",ep));
+                    //WriteDebug(String.Format("Expanded: {0}",ep));
                     if (session != null)
                     {
-		                WriteDebug(String.Format("Remote add: {0}",ep));
+		                //WriteDebug(String.Format("Remote add: {0}",ep));
                         src.Add( new RemoteIO(session,ep));
                     }
                     else
                     {
-		                WriteDebug(String.Format("local add: {0}",ep));
+		                //WriteDebug(String.Format("local add: {0}",ep));
                         src.Add( new LocalIO(this.SessionState,ep));
                     }
                 }
 
             }
-            WriteDebug("IOFactory exit.");
+            //WriteDebug("IOFactory exit.");
             return new Collection<IO> (src);
         }
 
@@ -236,7 +236,7 @@ namespace net.ninebroadcast
                 // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
                 if (fromsession != null)
                 {
-                    WriteDebug("From Session:");
+                    //WriteDebug("From Session:");
                     src= IOFactory (fromsession,path);
                 }
                 else
@@ -246,29 +246,32 @@ namespace net.ninebroadcast
                     src = IOFactory(null,path);
                 }
 
+                if (src.Count == 0)
+                    throw new FileNotFoundException(path[0]);
+
+                foreach (IO selm in src)
+                    WriteDebug("source element:" + selm.AbsPath());
+
+              //  WriteDebug("source path: " + path[0] + " :: " + src[0].AbsPath());
+
             // target should not be expandable
             // well only if it expands into 1 item
 				string[] ta = new string[] {target};
                 if (tosession != null)
                 {
-                    WriteDebug(String.Format("dst remote: {0}",target));
+                    //WriteDebug(String.Format("dst remote: {0}",target));
 					tdst = IOFactory(tosession,ta);
 
-                //    if (tdst.Count == 0) {
-                //        dst = new RemoteIO(tosession,target);
-                //        RemoteIO.MakeDir(target);
-                 //   }
                 }
                 else
                 {
-                    WriteDebug(String.Format("dst local: {0}",target));
+                    //WriteDebug(String.Format("dst local: {0}",target));
 					tdst = IOFactory(null,ta);
 
                 }
 
                 // going to work around the . expanding to .\*
-               // foreach (IO destination in tdst)
-               //     WriteDebug(destination.ToString());
+
 
 				/* ARGUMENT LOGIC
 
@@ -290,28 +293,45 @@ namespace net.ninebroadcast
 					// dst = new IO ();
 					if (tosession != null)
 					{
-						WriteDebug(String.Format("dst remote: {0}",target));
+						//WriteDebug(String.Format("dst remote: {0}",target));
 						dst = new RemoteIO(tosession,target);
 						dst.MakeDir(target);
 					}
 					else
 					{
-						WriteDebug(String.Format("dst local: {0}",target));
+						//WriteDebug(String.Format("dst local: {0}",target));
 						dst = new LocalIO(this.SessionState,target);
 						dst.MakeDir(target);
 					}
 				}
 				else if (tdst.Count == 1)
 					dst = tdst[0];
-				else 
-					throw  new ArgumentException("Ambiguous destination.","Target");
+				else if (target == "." && tdst.Count > 1)
+                {
+                    string pp  = System.IO.Path.GetDirectoryName(tdst[0].AbsPath());
+
+					if (tosession != null)
+					{
+						//WriteDebug(String.Format("dst remote: {0}",target));
+						dst = new RemoteIO(tosession,pp);
+					} else {
+                        dst = new LocalIO(this.SessionState,pp);
+                    }
+                } else
+					throw new ArgumentException("Ambiguous destination.","Target");
 
 
                 int count = 0;
                 foreach (IO cdir in src)
                 {
-                   // WriteVerbose(cdir.AbsPath());
+                    // I wonder if single files also have this issue
+                    WriteDebug("foreach source: " + cdir.AbsPath());
                     Collection<string> dd = cdir.ReadDir();
+
+                    if (cdir.IsDir())
+                        dd.Add(cdir.AbsPath());
+
+                    // WriteDebug ("read dir" + dd.Join(", "));
 
                     foreach (string file in dd)
                     {
@@ -349,6 +369,7 @@ namespace net.ninebroadcast
 
 // TODO: (these are possible options that could be implemented relatively easily)
 // going to put future implementable options here
+
 // -Checksum copy based on checksum not date/size
 // -Update skip newer files in destination
 // -inplace (normal operation is to write to temporary file and rename)
@@ -368,13 +389,15 @@ namespace net.ninebroadcast
 
                            // Console.WriteLine("src: {0}",file);
                             WriteVerbose(file);
-                            SyncStat srcType = cdir.GetInfo(file);  // relative from src basepath
+                            SyncStat srcType = cdir.GetInfo(file);  // relative from src basepath *** this is really really important ***
+
                             if (srcType.isDir())
                             {
-                               // Console.WriteLine ("MKDIR: {0}",dst.DestinationCombine(file));
-                                dst.MakeDir(file);
+                               WriteDebug(String.Format("MKDIR: {0}",dst.DestinationCombine(file)));
+                                dst.MakeDir(file);  // relative to the destination path
                             } else {
-                               // Console.WriteLine( "COPY TO: {0}",dst.DestinationCombine(file));
+
+                               WriteDebug( String.Format("COPY TO: {0}",dst.DestinationCombine(file)));
                                //dst.copyfrom(cdir,file,prog);
                                 copy(file,cdir,file,dst,prog);
                             }
