@@ -571,8 +571,9 @@ namespace net.ninebroadcast
 			pipe.Dispose();
 			if (ol.Count == 1)
 			{
+				//Console.WriteLine(ol[0].GetType)
 				foreach (PSMemberInfo pmi in ol[0].Members)
-					Console.WriteLine(pmi.Name);
+					Console.WriteLine(pmi.Name + " -> "+pmi.Value);
 
 				DirectoryInfo di = (DirectoryInfo)ol[0].BaseObject;
 				return di;
