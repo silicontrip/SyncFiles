@@ -33,6 +33,7 @@ namespace net.ninebroadcast
 		string GetCwd();
 		string GetRelative(string toPath);
 
+		FileAttributes GetAttributes(string lp);
 		bool IsDir();
         bool IsDir(string p);
 
@@ -73,12 +74,14 @@ namespace net.ninebroadcast
 		public string AbsPath() { return abspath; }
 		public string AbsPath(string p) { return Path.Combine(this.abspath,p); }
 
+		public FileAttributes GetAttributes(string p) { 
+			return File.GetAttributes(this.AbsPath(p));
+		}
+
 		public bool IsDir() { return IsDir(""); }
         public bool IsDir(string p)
         {
-			string ap =  AbsPath(p);
-            FileAttributes fa = File.GetAttributes(ap);
-			return (( fa & FileAttributes.Directory) != 0); 
+			return (( GetAttributes(p) & FileAttributes.Directory) != 0); 
         }
 
 		///<summary>gets list of files for IO basepath</summary>
@@ -86,7 +89,8 @@ namespace net.ninebroadcast
 
 		public string GetRelative(string toPath)
 		{
-			return Path.GetRelativePath(this.abspath, toPath);
+			// return Path.GetRelativePath(this.abspath, toPath);
+			return toPath.Replace(abspath.TrimEnd('\\') + "\\", "");
 		}
 
 		// because "get all directories recursively" may explode if it encounters a permission denied and return NOTHING.
@@ -96,7 +100,6 @@ namespace net.ninebroadcast
 
 		public Collection<string> ReadDir(string lp) // I really don't think there needs to be an argument based readdir, as this performs a recursive search
 		{
-
 			// the argument is for wild card expansion.  The abspath argument expands to elements with the same base path
 
 			List<string> dl = new List<string>();  // these are absolute
@@ -123,7 +126,7 @@ namespace net.ninebroadcast
 
 					foreach (string fe in tfl)
 					{
-						Console.WriteLine("root: " + fromRoot + ". File Entry: "+fe);
+						Console.WriteLine("root: " + abspath + ". File Entry: "+fe);
 
 						FileAttributes fa = File.GetAttributes(fe);
 						if ((fa & FileAttributes.Directory) != 0)
@@ -327,7 +330,6 @@ namespace net.ninebroadcast
 
 		}
 
-
 		public string GetCwd()
 		{
 			Pipeline pipe = this.session.Runspace.CreatePipeline();
@@ -349,10 +351,28 @@ namespace net.ninebroadcast
 
 		//public Collection<String> ReadDir() { return this.ReadDir(""); }
 
-        public bool IsDir() { return IsDir(""); }
+		public FileAttributes GetAttributes(string lp) 
+		{ 
+			string ap = this.AbsPath(lp);
+			string format = @"[io.file]::GetAttributes(""{0}"")";
 
+			string command = string.Format(format, ap);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			pipe.Commands.AddScript(command);
+			Collection<PSObject> rv = pipe.Invoke();
+ 			pipe.Dispose();
+
+			if (rv.Count == 1) {
+				PSObject ps = rv[0];
+				return (FileAttributes)(ps.BaseObject as System.Enum);
+			}
+			return 0;
+		}
+
+        public bool IsDir() { return IsDir(""); }
 		public bool IsDir(string p) {
 
+/*
 			string ap = this.AbsPath(p);
 
 			string format = @"(([io.file]::GetAttributes(""{0}"") -bAnd [io.fileattributes]::Directory) -ne 0)";
@@ -369,13 +389,17 @@ namespace net.ninebroadcast
 			   // ret.Add(ps.ToString()); 
 			}
 			pipe.Dispose();
-			return ret;   
+			*/
+			return ((GetAttributes(p) & FileAttributes.Directory) != 0);
+//			return ret;
 		}
 
 		public string GetRelative(string toPath)
-
 		{
-			return System.IO.Path.GetRelativePath(this.abspath, toPath);
+			//return System.IO.Path.GetRelativePath(this.abspath, toPath);
+
+			return toPath.Replace(abspath.TrimEnd('\\') + "\\", "");
+
 		}
 
 		public Collection<string> ReadDir(string lp)
@@ -465,11 +489,11 @@ namespace net.ninebroadcast
 // this behaves differently to the LocalIO version
 // Expand path only takes absolute paths.
 
-		public  Collection<string> ExpandPath (string p)
+		public Collection<string> ExpandPath (string p)
 		{
 			string f = @"resolve-path ""{0}""";
 			string command = string.Format(f, this.AbsPath(p));
-			Pipeline pipe = sess.Runspace.CreatePipeline();
+			Pipeline pipe = session.Runspace.CreatePipeline();
 			pipe.Commands.AddScript(command);
 
 			Collection<PSObject> res = pipe.Invoke();
@@ -477,7 +501,7 @@ namespace net.ninebroadcast
 			Collection<string> pathList = new Collection<string>();
 			foreach (PSObject ps in res)
 			{
-				pathList.Add(ps.ToString());               
+				pathList.Add(ps.ToString());
 			}
 
 			return pathList;

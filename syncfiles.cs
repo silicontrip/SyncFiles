@@ -121,30 +121,38 @@ namespace net.ninebroadcast
         private IO DestinationIO (PSSession pss, string dp)
         {
             IO destio;
-            if (session != null)
+            if (pss != null)
             {
-                destio = new RemoteIO (pss);
+                destio = new RemoteIO (pss,dp);
             } else {
-                destio = new LocalIO(this.SessionState);
+                destio = new LocalIO(this.SessionState,dp);
             }
 
-            string basepath = destio.GetCwd();
-            string abspath = Path.Combine(basepath, dp);  // if dp is absolute basepath is ignored
+			// destio abs = (cwd() + dp) or (dp) if rooted(dp)
+            WriteDebug("abs; " + destio.AbsPath());  
 
-            // here we have the absolute starting path
+			// is there a reason we are expanding the path ?
+			// a long time ago this also performed absolute path expansion
+			// now I'm just not sure why it's here
 
-            string tree = Path.GetDirectoryName(abspath);
-            string leaf = Path.GetFileName(abspath);
+			FileAttributes destfa = destio.GetFileAttributes();
 
-            string[] expandpath = destio.GetFileSystemEntries(tree,leaf);  // have to work out what this returns under different scenarios.
+			if (destio.IsDir()) 
+				return destio;
 
-            if (expandpath.Length == 0)
+            Collection<string> expandpath = destio.ExpandPath("");  // have to work out what this returns under different scenarios.
+
+            if (expandpath.Count == 0)
             {
-                destio.MakeDir(abspath);
-                destio.SetPath(abspath);
-            } else if (expandpath.Length == 1) {
-                destio.SetPath(abspath);
+                destio.MakeDir("");
+                // destio.SetPath(abspath);
+            } else if (expandpath.Count == 1) {
+               // destio.SetPath(abspath);
             } else {
+				// WriteDebug("abs: " + abspath);
+				foreach (string expanded in expandpath) {
+					WriteDebug("exp: " + expanded);
+				}
                 // will need to handle \. expanding to .\*
                 throw new ArgumentException ("Ambigious destination");
             }
@@ -152,59 +160,68 @@ namespace net.ninebroadcast
             return destio;
 
             //Collection<string> expandpath = destio.ExpandPath(abspath);
-
         }
 
         private IO SourceIO(PSSession session, string sp)
         {
             List<IO> src = new List<IO>();
             //WriteDebug(String.Format("Expanding: {0}",p));
-            Collection<string> expath;
+            //Collection<string> expath;
 
             // string cpath = Path.Combine(basepath, element);
             IO srcio;
             if (session != null)
             {
                 //expath = RemoteIO.ExpandPath(cpath,session);
+				WriteDebug("using remote IO");
                 srcio = new RemoteIO(session,sp);
             } else {
                 //expath = LocalIO.ExpandPath(cpath,this.SessionState);
+								WriteDebug("using local IO");
+
                 srcio = new LocalIO(this.SessionState,sp);
             }
 
-            string abspath = srcio.AbsPath();
+            //string abspath = srcio.AbsPath();
 
-            string tree = Path.GetDirectoryName(abspath);
-            string leaf = Path.GetFileName(abspath);
+			//WriteDebug("source IO abspath: " + abspath);
 
-            string[] expandpath = srcio.GetFileSystemEntries(tree,leaf); 
 
-            if (expandpath.Length == 0)
+            //string tree = System.IO.Path.GetDirectoryName(abspath);
+            //string leaf = System.IO.Path.GetFileName(abspath);
+
+			//WriteDebug("source IO tree/leaf: " + tree +"|"+leaf);
+
+            Collection<string> expandpath = srcio.ExpandPath(""); 
+
+            if (expandpath.Count == 0)
             {
                 throw new FileNotFoundException(sp);
-            } else    // if (expandpath.Length == 1) 
+            }
+			/*
+			 else    // if (expandpath.Length == 1) 
             {
                 srcio.SetPath(abspath);
                // src.Add(srcio);
             } 
-
+*/
             return srcio;
 
         }
 
         // private void copy(IO src,string srcFile, IO dst, string dstFile, ProgressRecord prog)
-        private void copy(string srcFile, IO src, IO dst, ProgressRecord prog)
+        private void copy(string filename, IO src, IO dst, ProgressRecord prog)
         {
 
             Int64 bytesxfered = 0;
             Int32 block = 0;
             Byte[] b;
 
-            SyncStat srcInfo = src.GetInfo(srcFile);  // rel
+            SyncStat srcInfo = src.GetInfo(filename);  // rel
             SyncStat dstInfo;
             try
             {
-            	dstInfo = dst.GetInfo(srcFile); 
+            	dstInfo = dst.GetInfo(filename); 
             } catch {
 				dstInfo = new SyncStat();
             }
@@ -221,9 +238,9 @@ namespace net.ninebroadcast
                 if (dstInfo.Exists)
                 {
                     // doesn't look very clever to me
-                    string srcHash = src.HashBlock(srcFile, block);  // we should worry if this throws an error
+                    string srcHash = src.HashBlock(filename, block);  // we should worry if this throws an error
                     try { 
-                        string dstHash = dst.HashBlock(dstFile, block); 
+                        string dstHash = dst.HashBlock(filename, block); 
                         if (srcHash.Equals(dstHash)) copyBlock = false;
 
 						WriteDebug(String.Format("src hash: {0}",srcHash));
@@ -236,9 +253,9 @@ namespace net.ninebroadcast
                 WriteDebug("will copy block: " + copyBlock);
                 if (copyBlock)
                 {
-                    b = src.ReadBlock(srcFile, block); // throw error report file failure
+                    b = src.ReadBlock(filename, block); // throw error report file failure
                     if (!whatif)
-                        dst.WriteBlock(dstFile, block, b);
+                        dst.WriteBlock(filename, block, b);
                 }
                 if (bytesxfered + LocalIO.g_blocksize > srcInfo.Length)
                     bytesxfered = srcInfo.Length;
@@ -336,8 +353,9 @@ namespace net.ninebroadcast
 
         void transfer (IO src, IO dst)
         {
-            string apath = src.GetAbsolutePath();
-            string rel = src.GetDirectoryName();
+            string apath = src.AbsPath();
+            // string rel = src.GetDirectoryName();
+			ProgressRecord prog = null;
             // wild card expansion only
             Collection<string> expath = src.ExpandPath(apath);
 
@@ -350,21 +368,21 @@ namespace net.ninebroadcast
                     if (includefile(sourcetarget))
                     {
                         Count++;
-                        string relpath  = src.MakeRel(sourcetarget);
+                        string relpath  = src.GetRelative(sourcetarget);
 
                         if (progress)
                             prog = new ProgressRecord(1, relpath, "Copying");
 
                         // Console.WriteLine("src: {0}",file);
                         WriteVerbose(relpath);
-                        SyncStat srcType = cdir.GetInfo(sourcetarget);  // relative from src basepath *** this is really really important ***
+                        SyncStat srcType = src.GetInfo(sourcetarget);  // relative from src basepath *** this is really really important ***
 
                         if (srcType.isDir())
                         {
-                            WriteDebug(String.Format("MKDIR: {0}",dst.DestinationCombine(relpath)));
+                            WriteDebug(String.Format("MKDIR: {0}",dst.AbsPath(relpath)));
                             dst.MakeDir(relpath);  // relative to the destination path
                         } else {
-                            WriteDebug( String.Format("COPY TO: {0}",dst.DestinationCombine(relpath)));
+                            WriteDebug( String.Format("COPY TO: {0}",dst.AbsPath(relpath)));
                             //dst.copyfrom(cdir,file,prog);
                             copy(relpath,src,dst,prog);
                       //      if (progress)
@@ -379,12 +397,12 @@ namespace net.ninebroadcast
 
         protected override void ProcessRecord()
         {
-            Collection<IO> src;
-			Collection<IO> tdst;
-            IO dst;
+            IO src;
+			IO tdst;
+            //IO dst;
 
             Collection<string> copylist = new Collection<string>();
-            ProgressRecord prog = null;
+            //ProgressRecord prog = null;
             Count = 0;
             try
             {
