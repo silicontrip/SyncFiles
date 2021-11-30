@@ -15,33 +15,30 @@ namespace net.ninebroadcast
 	{
 
 		// all paths should be relative to abspath.
-		Collection<string> ReadDir(string p);
-		Collection<string> ReadDir();
-
-		DirectoryInfo MakeDir(string p);
-		DirectoryInfo MakeAbsDir(string p);
-		string ElementPath();
-
 
 		SyncStat GetInfo(string p);
 		void SetInfo(string p, SyncStat f);
+		void SetPath(string b);
+
 		byte[] ReadBlock(string p, Int64 block);  // this might need a file handle, windows open and close is quite expensive
 		void WriteBlock(string p, Int64 block, byte[] data); // file handle?
 		string HashBlock(string p, Int64 block); // file handle
 		string HashTotal(string p);
-		void Delete(string p);
-		string GetCwd();
-		string SourceCombine(string p);
-        string DestinationCombine(string p);
 
-		// void SetPath(string p);
-		void SetBasePath(string p);
-		void SetElementPath(string p);
+		void Delete(string p);
+		void MakeDir(string p);
 
 		string AbsPath();
+		string AbsPath(string p);
+		string GetCwd();
+		string GetRelative(string toPath);
+
 		bool IsDir();
-		Collection<string> GetDirs(string p);
-		Collection<string> GetFiles(string p);
+        bool IsDir(string p);
+
+		Collection<string> ReadDir(string p);
+		//Collection<string> GetDirs(string p);
+		//Collection<string> GetFiles(string p);
 		Collection<string> ExpandPath(string p);
 
 	};
@@ -52,90 +49,44 @@ namespace net.ninebroadcast
 		private SessionState session;
 		protected string abspath;  // absolute, all path operations are relative to this.
 
-        protected string element;
+       // protected string element;
 
-	   // private String remoteUNC = null;
-
-		public LocalIO (SessionState ss) { 
+		public LocalIO (SessionState ss) 
+		{ 
 			this.session = ss; 
-			this.SetPath(@"./"); 
+			this.SetPath(GetCwd()); 
 		}
 
-
-		public LocalIO (SessionState ss, String base, string element) { 
+		public LocalIO (SessionState ss, string pp) 
+		{ 
 			this.session=ss; 
 
-			FileAttributes fa = File.GetAttributes(p);
-			return (( fa & FileAttributes.Directory) != 0); 
-
-			this.SetPath(pp);
+			this.SetPath(
+				Path.Combine(this.GetCwd(),pp)  // pp can be relative or absolute
+			);
 
 		}
 
-		public string AbsPath() { return Path.Combine(this.abspath,this.element); }
+		public void SetPath(string b) { this.abspath = b; }
 		public string GetCwd() { return this.session.Path.CurrentFileSystemLocation.ToString(); } 
 
-		public string SourceCombine(string p) { 
-			// Console.WriteLine("Combining: {0} + {1}",this.abspath,p);
-			if (this.IsDir())
-				return Path.Combine(this.abspath, p);
-			else
-			// this should be the same as Combine (this.abspath,p)
-				return this.AbsPath();  // it doesn't make sense combining a file path and subpath
-		}
+		public string AbsPath() { return abspath; }
+		public string AbsPath(string p) { return Path.Combine(this.abspath,p); }
 
-        public string DestinationCombine(string p) {
-            return Path.Combine(this.abspath, this.element, p);
-        }
-
-		public string ElementPath() { return this.element; }
-
-		/// <summary>
-		/// sets the IO base path.  works with relative or absolute paths. (stored as absolute)
-		/// </summary>
-		/// <param>Path relative or absolute</param>
-
-		public void SetSource (string pp) { 
-            string apath = Path.Combine(this.cwd,pp); 
-            this.abspath = Path.GetDirectoryName(apath);
-            this.element = Path.GetFileName(apath);
-        }
-
-
-		public void SetPath(string b, string e) {
-
-// Path logic
-// path absolute:  source abs =  GetDirectoryName(p) element = getFilename(p)
-// path rel: source abs = DirName (make abs) 
-
-// destination abs: abs = abs, element=""
-// rel: abs=combine element = ""
-
-            this.abspath = Path.Combine(session.Path.CurrentFileSystemLocation.ToString(), b);
-            // this.abspath = Path.GetDirectoryName(apath);
-            this.element = Path.GetFileName(e);
-		}
-
-		public bool IsDir() { 
-            return IsDir(this.AbsPath());
-		}
-
-        private static bool IsDir(string p)
+		public bool IsDir() { return IsDir(""); }
+        public bool IsDir(string p)
         {
-            FileAttributes fa = File.GetAttributes(p);
+			string ap =  AbsPath(p);
+            FileAttributes fa = File.GetAttributes(ap);
 			return (( fa & FileAttributes.Directory) != 0); 
         }
 
 		///<summary>gets list of files for IO basepath</summary>
-		public Collection<String> ReadDir() { return this.ReadDir(""); }
+		// public Collection<String> ReadDir() { return this.ReadDir(""); }
 
-		private static string makerel( Uri fromRoot, string toPath)
+		public string GetRelative(string toPath)
 		{
-			Uri feUri = new Uri (toPath);
-			
-			Uri rel = fromRoot.MakeRelativeUri(feUri);
-			string relPath = Uri.UnescapeDataString(rel.ToString());
-			return relPath.Replace(System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.DirectorySeparatorChar);
+			return Path.GetRelativePath(this.abspath, toPath);
 		}
 
 		// because "get all directories recursively" may explode if it encounters a permission denied and return NOTHING.
@@ -143,34 +94,25 @@ namespace net.ninebroadcast
 		/// <param>path to get</param>
 		/// <returns>Collection of files relative<returns>
 
-		public Collection<string> ReadDir(string lp) // I really don't think there needs to be an argument based readdir
+		public Collection<string> ReadDir(string lp) // I really don't think there needs to be an argument based readdir, as this performs a recursive search
 		{
-			// this needs make relative
-			//string p = this.SourceCombine(lp);
 
-		   // Console.WriteLine("READING REL: {0}",lp);
-		   // Console.WriteLine("READING ABS: {0}",p);
-			List<string> dl = new List<string>();
-			List<string> fl = new List<string>();
+			// the argument is for wild card expansion.  The abspath argument expands to elements with the same base path
 
-			if (!this.IsDir())
+			List<string> dl = new List<string>();  // these are absolute
+			List<string> fl = new List<string>();  // these are relative 
+
+			// path is file so only return this item
+			if (!this.IsDir(lp))
 			{
-			   // Console.WriteLine("returning file.");
-				// fl.Add(Path.GetFileName(this.AbsPath()));   // wrong 
-				fl.Add(this.ElementPath());
+				fl.Add(lp);
 				return new Collection<string>(fl);
 			}
 
-            // string parent = Path.GetDirectoryName(this.abspath);
-		    // Uri fromRoot = new Uri (parent  + "/");
-
-			// Uri fromRoot = new Uri (this.abspath + "/");
-
             // as I want the last element included in the relative path.
-            string searchRoot = this.DestinationCombine(lp);
-			dl.Add(searchRoot);
-			// fl.Add(makerel(fromRoot,searchRoot));
-			fl.Add(Path.GetRelativePath(this.abspath,searchRoot));
+
+			dl.Add(this.AbsPath(lp));
+			fl.Add(lp);
 
 			while (dl.Count > 0)
 			{
@@ -181,14 +123,13 @@ namespace net.ninebroadcast
 
 					foreach (string fe in tfl)
 					{
-
 						Console.WriteLine("root: " + fromRoot + ". File Entry: "+fe);
 
 						FileAttributes fa = File.GetAttributes(fe);
 						if ((fa & FileAttributes.Directory) != 0)
 							dl.Add(fe);
 
-						fl.Add(makerel(fromRoot,fe));
+						fl.Add(GetRelative(fe));
 					}
 				} catch {
 					dl.RemoveAt(0);
@@ -197,111 +138,39 @@ namespace net.ninebroadcast
 			return new Collection<string>(fl);
 		}
 
-		public Collection<string> GetDirs(string p)
-		{
-			string[] fl = Directory.GetDirectories(p);
-			return new Collection<string>(fl);
-		}
-
-		public Collection<string> GetFiles(string p)
-		{
-			string[] fl = Directory.GetFiles(p);
-			return new Collection<string>(fl);
-		}
-
 // should move from session to cwd
-		public Collection<string> ExpandPath (string pp) { return ExpandPath(pp,session); }
-		
-		public static Collection<string> ExpandPath (string pp, SessionState sess) 
-		{
-
-			string cur = sess.Path.CurrentFileSystemLocation.ToString();
+		public Collection<string> ExpandPath (string pp) 
+		{ 
+			//string cur = sess.Path.CurrentFileSystemLocation.ToString();
 			// Console.WriteLine(String.Format("LocalIO ExpandPath current: {0}",cur));
-			string p2 = Path.Combine(cur, pp);
-			//Console.WriteLine(String.Format("LocalIO ExpandPath combine: {0}",p2));
-
+			string p2 = this.AbsPath(pp);
 			string path = Path.GetDirectoryName(p2);
-			//Console.WriteLine(String.Format("LocalIO ExpandPath basedir: {0}",path));
-
 			string card = Path.GetFileName(p2);
 			//Console.WriteLine(String.Format("LocalIO ExpandPath file: {0}",card));
 
-         // Console.WriteLine(String.Format("path: {0} card: {1}",path,card));
-			string[] fse = {p2};
-			try {
-	            fse = Directory.GetFileSystemEntries(path,card);  // have to work out what this returns under different scenarios.
+			string[] fse; //  = {p2};
 
-				if (fse.Length == 0)
-				{
-					Directory.CreateDirectory(path);
-					fse = Directory.GetFileSystemEntries(path,card);
-					//Console.WriteLine(String.Format("make dir fse size: {0}",fse.Length));
-				}
-
-			} catch (DirectoryNotFoundException e) {
-
-				Directory.CreateDirectory(path);
-				fse = Directory.GetFileSystemEntries(path,card);
-
-				// Console.WriteLine(String.Format("LOCALIO GetFileSystemEntries Exception: {0}",e.Message));
-				//Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
-
-			} catch (Exception e) {
-				//Console.WriteLine(String.Format("LocalIO ExpandPath Exception."));
-				//Console.WriteLine(String.Format("LocalIO ExpandPath Exception message: {0}",e.Message));
-				//Console.WriteLine(String.Format("LocalIO ExpandPath Exception trace: {0}",e.StackTrace));
-
-				throw e;
-			}
-
+	        fse = Directory.GetFileSystemEntries(path,card);  // have to work out what this returns under different scenarios.
 			// Console.WriteLine(String.Format("LocalIO ExpandPath GetFileSystemEntries: {0}",fse));
 
             return new Collection<string>(fse);
 
 		}
 
-// I don't think splitting these 2 was required
-// I don't think this is called anymore
-		public static Collection<string> ExpandPath(string card, string path, SessionState sess)
-		{
-		   // Console.WriteLine("EXPANDING: {0} in {1}",card,path);
-
-			Collection<string> pathList = new Collection<string>();
-			foreach (string pt in Directory.EnumerateFileSystemEntries(path, card))
-			{
-				pathList.Add(pt);
-			}
-
-			if (card.Length == 0)
-				pathList.Add(path);
-
-			return pathList;
-		}
-
-// Should return stuff
-		public DirectoryInfo MakeDir(string p)
+// Should return stuff,  nah too hard
+		public void MakeDir(string p)
 		{
             // as the leaf element is removed from abspath, 
             // all destination operations must add it.
            // string apath = Path.Combine(this.AbsPath(), p);
            // System.IO.Directory.CreateDirectory(apath);
-			return System.IO.Directory.CreateDirectory(this.DestinationCombine(p));
-		}
-
-		public  DirectoryInfo MakeAbsDir(string p)
-		{
-			return System.IO.Directory.CreateDirectory(p);
+			System.IO.Directory.CreateDirectory(this.AbsPath(p));
 		}
 
 		public SyncStat GetInfo(string lp)
 		{
-		   // try
-		  //  {
+				string p = this.AbsPath(lp);  //read based Combine
 
-				string p = this.SourceCombine(lp);  //read based Combine
-
-               // Console.WriteLine("GetInfo: {0}",p);
-			//	Console.WriteLine(" abs: {0} + {1}",this.abspath,lp);
 				FileAttributes fa = System.IO.File.GetAttributes(p);
 
 				if ((fa & FileAttributes.Directory) == FileAttributes.Directory)
@@ -309,16 +178,12 @@ namespace net.ninebroadcast
 
 				//  are there more types?
 				return new SyncStat(new FileInfo(p));
-		  //  }
-		  //  catch (Exception)
-		   // {
-		  //      return new SyncStat();
-		   // }
+
 		}
 
 		public void SetInfo(string lp, SyncStat f)
 		{
-			string p = this.DestinationCombine(lp);  // write based combine
+			string p = this.AbsPath(lp);  // write based combine
 
 			FileSystemInfo pfi = new FileInfo(p);
 			if ((f.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
@@ -332,7 +197,7 @@ namespace net.ninebroadcast
 
 		public string HashTotal(string lp)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 
 			using (FileStream stream = System.IO.File.OpenRead(p))
 			{
@@ -348,7 +213,7 @@ namespace net.ninebroadcast
 
 		public byte[] ReadBlock(string lp, Int64 block)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 
 			using (FileStream fs = System.IO.File.Open(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
 			{
@@ -368,7 +233,7 @@ namespace net.ninebroadcast
 
 		public void WriteBlock(string lp, Int64 block, byte[] data)
 		{
-			string p = this.DestinationCombine(lp);
+			string p = this.AbsPath(lp);
 
 			using (FileStream fs = System.IO.File.Open(p, System.IO.FileMode.OpenOrCreate))
 			{
@@ -389,7 +254,7 @@ namespace net.ninebroadcast
 		// cater for short blocks
 		public string HashBlock(string lp, Int64 block)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 
 			// Console.WriteLine("file: " + p + " Block: " + block);
 
@@ -426,7 +291,7 @@ namespace net.ninebroadcast
 
 		public void Delete (string lp)
 		{
-			string p = this.DestinationCombine(lp);
+			string p = this.AbsPath(lp);
 
 			FileAttributes fa = System.IO.File.GetAttributes(p);
 
@@ -437,33 +302,35 @@ namespace net.ninebroadcast
 		}
 	}
 
+// ***********************************************************************************************************************************************************************************************
+
 	public class RemoteIO : IO
 	{
 		public readonly static int g_blocksize = 1048576;
 		readonly PSSession session;
 		private string abspath;
-		private string cwd;
-        private string element;
 
 		public RemoteIO(PSSession s)
 		{
 			this.session = s;
-			this.cwd = GetRemoteCWD(s);
-            this.SetPath("","");
+			this.SetPath(GetCwd()); 
 
 		}
 
-		public RemoteIO(PSSession s, string pp, string ee)
+		public RemoteIO(PSSession ss, string pp)
 		{
-			this.session = s;
-			this.cwd = GetRemoteCWD(s);
-			this.SetPath(pp,ee);
+			this.session=ss; 
+
+			this.SetPath(
+				Path.Combine(GetCwd(),pp) // pp can be relative or absolute
+			);
 
 		}
 
-		private static string GetRemoteCWD(PSSession s)
+
+		public string GetCwd()
 		{
-			Pipeline pipe = s.Runspace.CreatePipeline();
+			Pipeline pipe = this.session.Runspace.CreatePipeline();
 			//pipe.Commands.AddScript("resolve-path ~");
 			pipe.Commands.AddScript("get-location");
 			Collection<PSObject> rv = pipe.Invoke();
@@ -475,41 +342,22 @@ namespace net.ninebroadcast
 			throw new System.IO.DirectoryNotFoundException(); 
 		}
 
-		public string GetCwd() { return this.cwd; }
-		public string SourceCombine(string p) { return System.IO.Path.Combine(this.abspath,p); }
-        public string DestinationCombine(string p) { return System.IO.Path.Combine(this.abspath,this.element,p); }
-		public string ElementPath() { return this.element; }
+		public void SetPath(string b) { this.abspath = b; }
 
+		public string AbsPath() { return this.abspath; }
+		public string AbsPath(string p) { return Path.Combine(this.abspath,p); }
 
-		public void SetSource (string pp) { 
-            string apath = Path.Combine(this.cwd,pp); 
-            this.abspath = Path.GetDirectoryName(apath);
-            this.element = Path.GetFileName(apath);
-        }
+		//public Collection<String> ReadDir() { return this.ReadDir(""); }
 
-		public void SetPath(string b, string e) {
+        public bool IsDir() { return IsDir(""); }
 
-// Path logic
-// path absolute:  source abs =  GetDirectoryName(p) element = getFilename(p)
-// path rel: source abs = DirName (make abs) 
+		public bool IsDir(string p) {
 
-// destination abs: abs = abs, element=""
-// rel: abs=combine element = ""
+			string ap = this.AbsPath(p);
 
-            this.abspath = Path.Combine(this.cwd, b);
-            // this.abspath = Path.GetDirectoryName(apath);
-            this.element = e; // this should never be absolute
-		}
-
-		public string AbsPath() { return Path.Combine(this.abspath,this.element); }
-		public Collection<String> ReadDir() { return this.ReadDir(""); }
-
-        public bool IsDir() { return IsDir(this.AbsPath()); }
-
-		private bool IsDir(string p) {
 			string format = @"(([io.file]::GetAttributes(""{0}"") -bAnd [io.fileattributes]::Directory) -ne 0)";
 
-			string command = string.Format(format, p);
+			string command = string.Format(format, ap);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 			pipe.Commands.AddScript(command);
 			Collection<PSObject> rv = pipe.Invoke();
@@ -524,10 +372,17 @@ namespace net.ninebroadcast
 			return ret;   
 		}
 
+		public string GetRelative(string toPath)
+
+		{
+			return System.IO.Path.GetRelativePath(this.abspath, toPath);
+		}
+
 		public Collection<string> ReadDir(string lp)
 		{
-			//string p = this.Combine(lp);
-            string searchRoot = this.DestinationCombine(lp);
+			//string ap = this.Combine(lp);
+            //string searchRoot = this.DestinationCombine(ap);
+
 			string format = @"
 				$pstack = get-location
 				set-location ""{1}""
@@ -558,62 +413,29 @@ namespace net.ninebroadcast
 
 			// Console.WriteLine("readDir search {0} relative to {1}",searchRoot,this.abspath);
 
-			string command = string.Format(format, searchRoot, this.abspath);
+			string command = string.Format(format, lp, this.abspath);
 
 			Pipeline pipe = session.Runspace.CreatePipeline();
 			pipe.Commands.AddScript(command);
 			Collection<PSObject> rv = pipe.Invoke();
 			Collection<string> ret = new Collection<string>();
 
+// probably need to convert to relative path.
 			foreach (PSObject ps in rv) { ret.Add(ps.ToString()); }
 			pipe.Dispose();
 			return ret;
 		}
 
-		public Collection<string> GetDirs(string lp)
-		{
-			string p = this.SourceCombine(lp);
-			string format = @"[IO.Directory]::GetDirectories(""{0}"")";
+//		public DirectoryInfo MakeDir(string lp)
+//		{
+//			string p = this.DestinationCombine(lp);
+//			return this.MakeAbsDir(p);
+//		}
 
-			string command = string.Format(format, p);
-
-			Pipeline pipe = session.Runspace.CreatePipeline();
-			pipe.Commands.AddScript(command);
-			Collection<PSObject> rv = pipe.Invoke();
-			Collection<string> ret = new Collection<string>();
-
-			foreach (PSObject ps in rv) { ret.Add(ps.ToString()); }
-			pipe.Dispose();
-			return ret;
-		}
-
-		public Collection<string> GetFiles(string lp)
-		{
-			string p = this.SourceCombine(lp);
-			string format = @"[IO.Directory]::GetFiles(""{0}"")";
-
-			string command = string.Format(format, p);
-
-			Pipeline pipe = session.Runspace.CreatePipeline();
-			pipe.Commands.AddScript(command);
-			Collection<PSObject> rv = pipe.Invoke();
-			Collection<string> ret = new Collection<string>();
-
-			foreach (PSObject ps in rv) { ret.Add(ps.ToString()); }
-			pipe.Dispose();
-			return ret;
-		}
-
-		public DirectoryInfo MakeDir(string lp)
-		{
-			string p = this.DestinationCombine(lp);
-			return this.MakeAbsDir(p);
-		}
-
-		public DirectoryInfo MakeAbsDir(string p)
+		public void MakeDir(string p)
 		{
 			string format = @"[System.IO.Directory]::CreateDirectory(""{0}"")";
-			string command = string.Format(format, p);
+			string command = string.Format(format, this.AbsPath(p));
 			Pipeline pipe = session.Runspace.CreatePipeline();
 
 			pipe.Commands.AddScript(command);
@@ -635,18 +457,18 @@ namespace net.ninebroadcast
 			// well I give up unwrapping the object for the moment.
 			// until then, this will always happen.
 			// do we even use directory info anyway?
-			return null;
+			//return null;
 		}
 
-		public Collection<string> ExpandPath (string p) { return ExpandPath(p,session); }
+	//	public Collection<string> ExpandPath (string p) { return ExpandPath(p,session); }
 
 // this behaves differently to the LocalIO version
 // Expand path only takes absolute paths.
 
-		public static Collection<string> ExpandPath (string p, PSSession sess)
+		public  Collection<string> ExpandPath (string p)
 		{
 			string f = @"resolve-path ""{0}""";
-			string command = string.Format(f, p);
+			string command = string.Format(f, this.AbsPath(p));
 			Pipeline pipe = sess.Runspace.CreatePipeline();
 			pipe.Commands.AddScript(command);
 
@@ -666,7 +488,7 @@ namespace net.ninebroadcast
 
 		public SyncStat GetInfo(string lp)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 
 			string format = @"get-item -force ""{0}"""; // Force for hidden files
@@ -688,7 +510,7 @@ namespace net.ninebroadcast
 
 		public void SetInfo(string lp, SyncStat f)
 		{
-			string p = this.DestinationCombine(lp);
+			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 			// string format;
 
@@ -714,7 +536,7 @@ namespace net.ninebroadcast
 
 		public string HashTotal(string lp)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 
 			string f = @"
@@ -746,7 +568,7 @@ namespace net.ninebroadcast
 
 		public byte[] ReadBlock(string lp, Int64 block)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 			// Console.WriteLine("file: " + p + " block: " + block);
 
 			Int64 bloffset = block * g_blocksize;
@@ -785,7 +607,7 @@ namespace net.ninebroadcast
 
 		public void WriteBlock(string lp, Int64 block, byte[] data)
 		{
-			string p = this.DestinationCombine(lp);
+			string p = this.AbsPath(lp);
 
 			// p, bloffset, b64data, bloffset + data.Length,
 			string format = @"
@@ -814,9 +636,10 @@ namespace net.ninebroadcast
 			pipe.Dispose();
 		}	
 
+// old as in, we no longer use this one.
 		public void OldWriteBlock(string lp, Int64 block, byte[] data)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 
 			string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::OpenOrCreate)";
@@ -854,7 +677,7 @@ namespace net.ninebroadcast
 
 		public void Delete(string lp)
 		{
-			string p = this.DestinationCombine(lp);
+			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 
 			string format = "remove-item -force \"{0}\""; // Force for hidden files
@@ -865,9 +688,10 @@ namespace net.ninebroadcast
 			pipe.Dispose();
 		}
 
+// old, no longer used?
 		public string OldHashBlock(string lp, Int64 block)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 			string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::Open)";
 			string command = string.Format(format, p);
 			Pipeline pipe = session.Runspace.CreatePipeline();
@@ -912,7 +736,7 @@ namespace net.ninebroadcast
 
 		public string HashBlock(string lp, Int64 block)
 		{
-			string p = this.SourceCombine(lp);
+			string p = this.AbsPath(lp);
 			// p, 
 			string format = @"
 			$fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open)

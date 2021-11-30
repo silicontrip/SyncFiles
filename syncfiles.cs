@@ -19,6 +19,8 @@ namespace net.ninebroadcast
     public class SyncPathCommand : PSCmdlet
     {
 
+        Int32 Count = 0;
+
         public
         SyncPathCommand()
         {
@@ -58,6 +60,15 @@ namespace net.ninebroadcast
             set { progress = value; }
         }
         private Boolean progress;
+
+
+        [Parameter()]
+        public SwitchParameter WhatIf
+        {
+            get { return whatif; }
+            set { whatif = value; }
+        }
+        private Boolean whatif;
 
         [Parameter()]
         public SwitchParameter Delete
@@ -107,60 +118,93 @@ namespace net.ninebroadcast
         }
         private string[] includeList;
 
-        private Collection<IO> IOFactory(PSSession session,string basepath, string element)
+        private IO DestinationIO (PSSession pss, string dp)
         {
-            List<IO> src = new List<IO>();
-                //WriteDebug(String.Format("Expanding: {0}",p));
-            Collection<string> expath;
-
-            string cpath = Path.Combine(basepath, element);
-
+            IO destio;
             if (session != null)
             {
-                expath = RemoteIO.ExpandPath(cpath,session);
+                destio = new RemoteIO (pss);
             } else {
-                expath = LocalIO.ExpandPath(cpath,this.SessionState);
+                destio = new LocalIO(this.SessionState);
             }
 
-            //WriteDebug (String.Format("expanded path count: {0}",expath.Count));
-			// WriteDebug (String.Format("expanded from path: {0} -> {1} ",p,String.Join(", ",expath)));
-            // so what causes a 0 length ExpandPath.
-            // sould've been obvious, a non existent path
-            // We don't know if this is a source or destination path, in order to handle non existant paths
-            // expath should all be absolute
+            string basepath = destio.GetCwd();
+            string abspath = Path.Combine(basepath, dp);  // if dp is absolute basepath is ignored
 
-            foreach (string ep in expath)
+            // here we have the absolute starting path
+
+            string tree = Path.GetDirectoryName(abspath);
+            string leaf = Path.GetFileName(abspath);
+
+            string[] expandpath = destio.GetFileSystemEntries(tree,leaf);  // have to work out what this returns under different scenarios.
+
+            if (expandpath.Length == 0)
             {
-                //WriteDebug(String.Format("Expanded: {0}",ep));
-                if (session != null)
-                {
-                    //WriteDebug(String.Format("Remote add: {0}",ep));
-                    src.Add( new RemoteIO(session,ep));
-                }
-                else
-                {
-                    //WriteDebug(String.Format("local add: {0}",ep));
-                    src.Add( new LocalIO(this.SessionState,ep));
-                }
+                destio.MakeDir(abspath);
+                destio.SetPath(abspath);
+            } else if (expandpath.Length == 1) {
+                destio.SetPath(abspath);
+            } else {
+                // will need to handle \. expanding to .\*
+                throw new ArgumentException ("Ambigious destination");
             }
 
-            //WriteDebug("IOFactory exit.");
-            return new Collection<IO> (src);
+            return destio;
+
+            //Collection<string> expandpath = destio.ExpandPath(abspath);
+
+        }
+
+        private IO SourceIO(PSSession session, string sp)
+        {
+            List<IO> src = new List<IO>();
+            //WriteDebug(String.Format("Expanding: {0}",p));
+            Collection<string> expath;
+
+            // string cpath = Path.Combine(basepath, element);
+            IO srcio;
+            if (session != null)
+            {
+                //expath = RemoteIO.ExpandPath(cpath,session);
+                srcio = new RemoteIO(session,sp);
+            } else {
+                //expath = LocalIO.ExpandPath(cpath,this.SessionState);
+                srcio = new LocalIO(this.SessionState,sp);
+            }
+
+            string abspath = srcio.AbsPath();
+
+            string tree = Path.GetDirectoryName(abspath);
+            string leaf = Path.GetFileName(abspath);
+
+            string[] expandpath = srcio.GetFileSystemEntries(tree,leaf); 
+
+            if (expandpath.Length == 0)
+            {
+                throw new FileNotFoundException(sp);
+            } else    // if (expandpath.Length == 1) 
+            {
+                srcio.SetPath(abspath);
+               // src.Add(srcio);
+            } 
+
+            return srcio;
+
         }
 
         // private void copy(IO src,string srcFile, IO dst, string dstFile, ProgressRecord prog)
-        private void copy(string srcFile, IO src, string dstFile, IO dst, ProgressRecord prog)
+        private void copy(string srcFile, IO src, IO dst, ProgressRecord prog)
         {
 
             Int64 bytesxfered = 0;
             Int32 block = 0;
             Byte[] b;
 
-            SyncStat srcInfo = src.GetInfo(srcFile);
+            SyncStat srcInfo = src.GetInfo(srcFile);  // rel
             SyncStat dstInfo;
             try
             {
-            	dstInfo = dst.GetInfo(dstFile);
+            	dstInfo = dst.GetInfo(srcFile); 
             } catch {
 				dstInfo = new SyncStat();
             }
@@ -193,7 +237,8 @@ namespace net.ninebroadcast
                 if (copyBlock)
                 {
                     b = src.ReadBlock(srcFile, block); // throw error report file failure
-                    dst.WriteBlock(dstFile, block, b);
+                    if (!whatif)
+                        dst.WriteBlock(dstFile, block, b);
                 }
                 if (bytesxfered + LocalIO.g_blocksize > srcInfo.Length)
                     bytesxfered = srcInfo.Length;
@@ -213,71 +258,13 @@ namespace net.ninebroadcast
                 }
                 block++;
             } while (bytesxfered < srcInfo.Length);
+
 			if (prog != null)
 			{
 				prog.RecordType = ProgressRecordType.Completed;
 				WriteProgress(prog);
 			}
-
         }
-
-        // Override the ProcessRecord method to process
-
-        protected override void ProcessRecord()
-        {
-            Collection<IO> src;
-			Collection<IO> tdst;
-            IO dst;
-
-            ProgressRecord prog = null;
-            try
-            {
-                foreach (string p in path)
-                {
-                    // string curPath = this.SessionState.Path.CurrentFileSystemLocation.ToString(); //System.IO.Directory.GetCurrentDirectory();
-
-                    string fbase = System.IO.Path.GetDirectoryName(p);
-                    string felem = System.IO.Path.GetFileName(p);
-
-                    if (fromsession != null)
-                    {
-                        //WriteDebug("From Session:");
-                        src= IOFactory (fromsession,fbase,felem);
-                    }
-                    else
-                    {
-                        // Console.WriteLine("src local: {0}",target);
-                        // WriteDebug("local path.");
-                        src = IOFactory(null,fbase,felem);
-                    }
-                }
-                if (src.Count == 0)
-                    throw new FileNotFoundException(path[0]);
-
-                //foreach (IO selm in src)
-                //    WriteDebug("source element:" + selm.AbsPath());
-
-                //  WriteDebug("source path: " + path[0] + " :: " + src[0].AbsPath());
-
-                // target should not be expandable
-                // well only if it expands into 1 item
-
-				// string[] ta = new string[] {target};
-                if (tosession != null)
-                {
-                    //WriteDebug(String.Format("dst remote: {0}",target));
-					tdst = IOFactory(tosession,target,"");
-
-                }
-                else
-                {
-                    //WriteDebug(String.Format("dst local: {0}",target));
-					tdst = IOFactory(null,target,"");
-
-                }
-
-                // going to work around the . expanding to .\*
-
 
 				/* ARGUMENT LOGIC
 
@@ -294,125 +281,123 @@ namespace net.ninebroadcast
 				Source: exist files & directories
 				*/
 
-				if (tdst.Count == 0)
-				{
-					// dst = new IO ();
-					if (tosession != null)
-					{
-						//WriteDebug(String.Format("dst remote: {0}",target));
-						dst = new RemoteIO(tosession,target);
-						dst.MakeDir(target);
-					}
-					else
-					{
-						//WriteDebug(String.Format("dst local: {0}",target));
-						dst = new LocalIO(this.SessionState,target);
-						dst.MakeDir(target);
-					}
-				}
-				else if (tdst.Count == 1)
-					dst = tdst[0];
-				else if (target == "." && tdst.Count > 1)
+                // basic rsync options (-a) assumed to always be active
+                // recursive
+                // copy links (maybe difficult for windows, symlinks are privileged)
+                // preserve permissions (attributes & acl) or if implementing -Extended attributes only
+                // preserve times; System.IO.File.GetAttributes(path) FileSystemInfo
+                // preserve group
+                // preserve owner 
+                // Devices (N/A)
+
+                // TODO: (these are possible options that could be implemented relatively easily)
+                // going to put future implementable options here
+
+                // -Checksum copy based on checksum not date/size
+                // -Update skip newer files in destination
+                // -inplace (normal operation is to write to temporary file and rename)
+                // -WhatIf (aka dry run)
+                // -Whole don't perform block check
+                // - don't cross reparse points
+                // checksum block size
+                // -Delete (delete files that only exist in the destination)
+                // -minSize / -maxsize
+                // -compress (maybe)
+                // -Extended (acl)
+
+
+// putting all file matching here
+        bool includefile (string file)
+        {
+            bool include = true;
+            if (includeList != null)
+            {
+                include = false;
+                foreach (string m in includeList)
                 {
-                    string pp  = System.IO.Path.GetDirectoryName(tdst[0].AbsPath());
-
-					if (tosession != null)
-					{
-						//WriteDebug(String.Format("dst remote: {0}",target));
-						dst = new RemoteIO(tosession,pp);
-					} else {
-                        dst = new LocalIO(this.SessionState,pp);
-                    }
-                } else
-					throw new ArgumentException("Ambiguous destination.","Target");
-
-
-                int count = 0;
-                foreach (IO cdir in src)
-                {
-                    // I wonder if single files also have this issue
-                    WriteDebug("foreach source: " + cdir.AbsPath());
-
-                    // this must return relative (to argument) path
-                    Collection<string> dd = cdir.ReadDir();
-
-                    if (cdir.IsDir())
-                        dd.Add(cdir.AbsPath());
-
-                    // WriteDebug ("read dir" + dd.Join(", "));
-
-                    foreach (string file in dd)
-                    {
-                        bool include = true;
-                        if (includeList != null)
-                        {
-                            include = false;
-                            foreach (string m in includeList)
-                            {
 							    // string, string, method
-							    Match me = Regex.Match(file,m);
-							    if (me.Success) { include = true; }
+					Match me = Regex.Match(file,m);
+					if (me.Success) { include = true; }
                             // if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = true; }
-                            }
-                        }
+                }
+            }
 
-                        if (excludeList != null)
-                        {
-                            foreach (string m in excludeList)
-                            {
-							    Match me = Regex.Match(file,m);
-							    if (me.Success) { include = false; }
+            if (excludeList != null)
+            {
+                foreach (string m in excludeList)
+                {
+					Match me = Regex.Match(file,m);
+					if (me.Success) { include = false; }
                                 // if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = false; }
-                            }
-                        }
+                }
+            }
+            return include;
+        }
 
-// basic rsync options (-a) assumed to always be active
-// recursive
-// copy links (maybe difficult for windows, symlinks are privileged)
-// preserve permissions (attributes & acl) or if implementing -Extended attributes only
-// preserve times; System.IO.File.GetAttributes(path) FileSystemInfo
-// preserve group
-// preserve owner 
-// Devices (N/A)
+        void transfer (IO src, IO dst)
+        {
+            string apath = src.GetAbsolutePath();
+            string rel = src.GetDirectoryName();
+            // wild card expansion only
+            Collection<string> expath = src.ExpandPath(apath);
 
+            foreach (string spath in expath)
+            {
+                Collection<string> allpath = src.ReadDir(spath);
+                foreach (string sourcetarget in allpath)
+                {
+                    // copylist.Add(sourcetarget);
+                    if (includefile(sourcetarget))
+                    {
+                        Count++;
+                        string relpath  = src.MakeRel(sourcetarget);
 
-// TODO: (these are possible options that could be implemented relatively easily)
-// going to put future implementable options here
+                        if (progress)
+                            prog = new ProgressRecord(1, relpath, "Copying");
 
-// -Checksum copy based on checksum not date/size
-// -Update skip newer files in destination
-// -inplace (normal operation is to write to temporary file and rename)
-// -WhatIf (aka dry run)
-// -Whole don't perform block check
-// - don't cross reparse points
-// checksum block size
-// -Delete (delete files that only exist in the destination)
-// -minSize / -maxsize
-// -compress (maybe)
-// -Extended (acl)
-                        count++;
-                        if (include)
+                        // Console.WriteLine("src: {0}",file);
+                        WriteVerbose(relpath);
+                        SyncStat srcType = cdir.GetInfo(sourcetarget);  // relative from src basepath *** this is really really important ***
+
+                        if (srcType.isDir())
                         {
-                            if (progress)
-                                prog = new ProgressRecord(1, file, "Copying");
-
-                           // Console.WriteLine("src: {0}",file);
-                            WriteVerbose(file);
-                            SyncStat srcType = cdir.GetInfo(file);  // relative from src basepath *** this is really really important ***
-
-                            if (srcType.isDir())
-                            {
-                               WriteDebug(String.Format("MKDIR: {0}",dst.DestinationCombine(file)));
-                                dst.MakeDir(file);  // relative to the destination path
-                            } else {
-
-                               WriteDebug( String.Format("COPY TO: {0}",dst.DestinationCombine(file)));
-                               //dst.copyfrom(cdir,file,prog);
-                                copy(file,cdir,file,dst,prog);
-                            }
+                            WriteDebug(String.Format("MKDIR: {0}",dst.DestinationCombine(relpath)));
+                            dst.MakeDir(relpath);  // relative to the destination path
+                        } else {
+                            WriteDebug( String.Format("COPY TO: {0}",dst.DestinationCombine(relpath)));
+                            //dst.copyfrom(cdir,file,prog);
+                            copy(relpath,src,dst,prog);
+                      //      if (progress)
+                       //         prog.close();
                         }
                     }
-                }    
+                }
+            }
+        }
+
+        // Override the ProcessRecord method to process
+
+        protected override void ProcessRecord()
+        {
+            Collection<IO> src;
+			Collection<IO> tdst;
+            IO dst;
+
+            Collection<string> copylist = new Collection<string>();
+            ProgressRecord prog = null;
+            Count = 0;
+            try
+            {
+                tdst = DestinationIO(tosession,target);
+
+                foreach (string p in path)
+                {
+                    WriteDebug("source fromsession: " + p);
+                    src= SourceIO (fromsession,p);
+                    transfer (src,tdst);
+                }
+
+  
             }
             catch (Exception e)
             {
