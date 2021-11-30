@@ -19,6 +19,7 @@ namespace net.ninebroadcast
 		SyncStat GetInfo(string p);
 		void SetInfo(string p, SyncStat f);
 		void SetPath(string b);
+		void Parent();
 
 		byte[] ReadBlock(string p, Int64 block);  // this might need a file handle, windows open and close is quite expensive
 		void WriteBlock(string p, Int64 block, byte[] data); // file handle?
@@ -73,6 +74,7 @@ namespace net.ninebroadcast
 
 		public string AbsPath() { return abspath; }
 		public string AbsPath(string p) { return Path.Combine(this.abspath,p); }
+		public void Parent() { this.abspath = Path.GetDirectoryName(this.abspath); }
 
 		public FileAttributes GetAttributes(string p) { 
 			return File.GetAttributes(this.AbsPath(p));
@@ -90,7 +92,8 @@ namespace net.ninebroadcast
 		public string GetRelative(string toPath)
 		{
 			// return Path.GetRelativePath(this.abspath, toPath);
-			return toPath.Replace(abspath.TrimEnd('\\') + "\\", "");
+			char ps = System.IO.Path.DirectorySeparatorChar;
+			return toPath.Replace(abspath.TrimEnd(ps) + ps, "");
 		}
 
 		// because "get all directories recursively" may explode if it encounters a permission denied and return NOTHING.
@@ -126,7 +129,8 @@ namespace net.ninebroadcast
 
 					foreach (string fe in tfl)
 					{
-						Console.WriteLine("root: " + abspath + ". File Entry: "+fe);
+						string fr = this.GetRelative(fe);
+						Console.WriteLine("root: " + abspath + ". File Entry: "+fr);
 
 						FileAttributes fa = File.GetAttributes(fe);
 						if ((fa & FileAttributes.Directory) != 0)
@@ -348,6 +352,7 @@ namespace net.ninebroadcast
 
 		public string AbsPath() { return this.abspath; }
 		public string AbsPath(string p) { return Path.Combine(this.abspath,p); }
+		public void Parent() { this.abspath = Path.GetDirectoryName(this.abspath); }
 
 		//public Collection<String> ReadDir() { return this.ReadDir(""); }
 
