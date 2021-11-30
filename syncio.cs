@@ -274,12 +274,16 @@ namespace net.ninebroadcast
 				Byte[] b = new Byte[g_blocksize];
 
 				//   Console.WriteLine("read");
+				int num=0;
+				try {
+					num = fs.Read(b, 0, g_blocksize);  // this sometimes takes a long time to complete. wtf windows?
+					fs.Close();
+				} catch (IOException e) {
+					b = new byte[0]{};
+				}
 
-				int num = fs.Read(b, 0, g_blocksize);  // this sometimes takes a long time to complete. wtf windows?
-
-				fs.Close();
-				if (num == 0)
-					throw new System.IO.EndOfStreamException();  // port this to remote PS code.
+				//if (num == 0)
+				//	throw new System.IO.EndOfStreamException();  // port this to remote PS code.
 																 //   Console.WriteLine("crypt create");
 
 				System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create();
