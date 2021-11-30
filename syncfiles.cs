@@ -135,7 +135,9 @@ namespace net.ninebroadcast
 			// a long time ago this also performed absolute path expansion
 			// now I'm just not sure why it's here
 
-			FileAttributes destfa = destio.GetFileAttributes();
+			FileAttributes destfa = destio.GetAttributes("");
+
+			WriteDebug("file attributes: " + destfa);
 
 			if (destio.IsDir()) 
 				return destio;
@@ -358,7 +360,7 @@ namespace net.ninebroadcast
 			ProgressRecord prog = null;
             // wild card expansion only
             Collection<string> expath = src.ExpandPath(apath);
-
+			src.Parent();
             foreach (string spath in expath)
             {
                 Collection<string> allpath = src.ReadDir(spath);
