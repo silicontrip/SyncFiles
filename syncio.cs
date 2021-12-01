@@ -93,9 +93,11 @@ namespace net.ninebroadcast
 		}
 */
 		public bool IsDir() { return IsDir(""); }
-        public bool IsDir(string p)
+        public bool IsDir(string lp)
         {
-			return (( GetAttributes(p) & FileAttributes.Directory) != 0); 
+			string p = this.AbsPath(lp);
+			FileAttributes fa = File.GetAttributes(p);
+			return (( fa & FileAttributes.Directory) != 0); 
         }
 
 		///<summary>gets list of files for IO basepath</summary>
@@ -142,7 +144,7 @@ namespace net.ninebroadcast
 					foreach (string fe in tfl)
 					{
 						string fr = this.GetRelative(fe);
-						Console.WriteLine("root: " + abspath + ". File Entry: "+fr);
+						//Console.WriteLine("root: " + abspath + ". File Entry: "+fr);
 
 						FileAttributes fa = File.GetAttributes(fe);
 						if ((fa & FileAttributes.Directory) != 0)
@@ -185,33 +187,35 @@ namespace net.ninebroadcast
            // System.IO.Directory.CreateDirectory(apath);
 			System.IO.Directory.CreateDirectory(this.AbsPath(p));
 		}
-		private FileInfo getfileinfo (string lp)
+		private FileSystemInfo getfileinfo (string lp)
 		{
-			return new FileInfo(this.AbsPath(lp));
+			if (IsDir(lp))
+				return new DirectoryInfo(this.AbsPath(lp));
+			else
+				return new FileInfo(this.AbsPath(lp));
 		}
 
 		public DateTime GetModificationTime(string lp)
 		{
-			FileInfo fi = getfileinfo(lp);
+			FileSystemInfo fi = getfileinfo(lp);
 			return fi.LastWriteTimeUtc;
 		}
 
-
 		public void SetModificationTime(string lp, DateTime dt)
 		{
-			FileInfo fi = getfileinfo(lp);
+			FileSystemInfo fi = getfileinfo(lp);
 			fi.LastWriteTimeUtc = dt;
 		}
 
 		public long GetLength(string lp)
 		{
-			FileInfo fi = getfileinfo(lp);
+			FileInfo fi = (FileInfo)getfileinfo(lp);
 			return fi.Length;
 		}
 
 		public FileAttributes GetAttributes(string lp)
 		{
-			FileInfo fi = getfileinfo(lp);
+			FileSystemInfo fi = getfileinfo(lp);
 			return fi.Attributes;
 		}
 
@@ -219,7 +223,7 @@ namespace net.ninebroadcast
  
 		public void SetAttributes(string lp, FileAttributes fa)
 		{
-			FileInfo fi = getfileinfo(lp);
+			FileSystemInfo fi = getfileinfo(lp);
 			fi.Attributes = fa;
 		}
 
@@ -228,12 +232,12 @@ namespace net.ninebroadcast
 			return getfileinfo(lp).Exists;
 		}
 
-
 		public FileSecurity GetAcl(string lp)
 		{
 			string p = this.AbsPath(lp); 
 			return new FileSecurity(p,AccessControlSections.All);
 		}
+
 		public void SetAcl(string lp, FileSecurity fa)
 		{
 			string p = this.AbsPath(lp);
@@ -427,8 +431,11 @@ namespace net.ninebroadcast
 
 
         public bool IsDir() { return IsDir(""); }
-		public bool IsDir(string p) {
-			return ((GetAttributes(p) & FileAttributes.Directory) != 0);
+		public bool IsDir(string lp) {
+
+			//string p = this.AbsPath(lp);
+			//FileAttributes fa = File.GetAttributes(p);
+			return ((GetAttributes(lp) & FileAttributes.Directory) != 0);
 		}
 
 		public string GetRelative(string toPath)

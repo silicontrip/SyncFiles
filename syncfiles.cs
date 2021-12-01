@@ -193,7 +193,7 @@ namespace net.ninebroadcast
             }
 
 			// destio abs = (cwd() + dp) or (dp) if rooted(dp)
-            WriteDebug("abs; " + destio.AbsPath());  
+            WriteDebug("syncfiles::DestinationIO AbsPath " + destio.AbsPath());  
 
 			// is there a reason we are expanding the path ?
 			// a long time ago this also performed absolute path expansion
@@ -201,7 +201,7 @@ namespace net.ninebroadcast
 
 			FileAttributes destfa = destio.GetAttributes("");
 
-			WriteDebug("file attributes: " + destfa);
+			WriteDebug("syncfiles::DestinationIO DestAttributes: " + destfa);
 
 			if (destio.IsDir()) 
 				return destio;
@@ -217,7 +217,7 @@ namespace net.ninebroadcast
             } else {
 				// WriteDebug("abs: " + abspath);
 				foreach (string expanded in expandpath) {
-					WriteDebug("exp: " + expanded);
+					WriteDebug("syncfiles::DestinationIO Destination Error: " + expanded);
 				}
                 // will need to handle \. expanding to .\*
                 throw new ArgumentException ("Ambigious destination");
@@ -239,11 +239,11 @@ namespace net.ninebroadcast
             if (session != null)
             {
                 //expath = RemoteIO.ExpandPath(cpath,session);
-				WriteDebug("using remote IO");
+				WriteDebug("syncfiles::SourceIO new RemoteIO");
                 srcio = new RemoteIO(session,sp);
             } else {
                 //expath = LocalIO.ExpandPath(cpath,this.SessionState);
-				WriteDebug("using local IO");
+				WriteDebug("syncfiles::SourceIO new LocalIO");
                 srcio = new LocalIO(this.SessionState,sp);
             }
 
@@ -260,9 +260,35 @@ namespace net.ninebroadcast
 
         // private void copy(IO src,string srcFile, IO dst, string dstFile, ProgressRecord prog)
 
+        private void CopyMetadata(string filename, IO src, IO dst)
+        {
+                WriteDebug("syncfiles::CopyMetadata");
+
+            if (times)
+            {
+                DateTime smod = src.GetModificationTime(filename);
+                WriteDebug ("syncfiles::copy times mod time: " + smod);
+                dst.SetModificationTime(filename,smod);
+            }
+
+            if (permissions)
+                dst.SetAttributes(filename,src.GetAttributes(filename));
+
+            if (acls)
+                dst.SetAcl(filename,src.GetAcl(filename)); // stuff
+
+            if (owner)
+                ; // stuff
+
+            if (group)
+                ;
+        }
+
 		// Copies a single file to destination
         private void copy(string filename, IO src, IO dst, ProgressRecord prog)
         {
+
+            WriteDebug("copy: " + filename);
 
             Int64 bytesxfered = 0;
             Int32 block = 0;
@@ -272,7 +298,7 @@ namespace net.ninebroadcast
 
             do
             {
-                WriteDebug("Do Block copy: " + block);
+                WriteDebug("SyncFiles::copy: do: " + block);
                 bool copyBlock = true;
                 if (!whole) 
                 {
@@ -287,15 +313,15 @@ namespace net.ninebroadcast
                             string dstHash = dst.HashBlock(filename, block); 
                             if (srcHash.Equals(dstHash)) copyBlock = false;
 
-                            WriteDebug(String.Format("src hash: {0}",srcHash));
-                            WriteDebug(String.Format("dst hash: {0}",dstHash));
+                            WriteDebug(String.Format("SyncFiles::copy src hash: {0}",srcHash));
+                            WriteDebug(String.Format("SyncFiles::copy dst hash: {0}",dstHash));
 
                         } catch {
                             copyBlock = true;
                         }
                     }
                 }
-                WriteDebug("will copy block: " + copyBlock);
+                WriteDebug("SyncFiles::copy copyBlock: " + copyBlock);
                 if (copyBlock)
                 {
                     b = src.ReadBlock(filename, block); // throw error report file failure
@@ -326,20 +352,7 @@ namespace net.ninebroadcast
 
 			// Set Attributes
 
-            if (times)
-                dst.SetModificationTime(filename,src.GetModificationTime(filename));
 
-            if (permissions)
-                dst.SetAttributes(filename,src.GetAttributes(filename));
-
-            if (acls)
-                dst.SetAcl(filename,src.GetAcl(filename)); // stuff
-
-            if (owner)
-                ; // stuff
-
-            if (group)
-                ;
 
 			if (prog != null)
 			{
@@ -408,6 +421,8 @@ namespace net.ninebroadcast
 // different from skipping a file based on checksum/ date/ size
         Boolean includefile(string file)
         {
+            WriteDebug("syncfiles::includefile() " + file);
+
             bool include = true;
             if (includeList != null)
             {
@@ -437,7 +452,12 @@ namespace net.ninebroadcast
 
         Boolean skipfile (IO src, IO dst, string p)
         {
+            WriteDebug("syncfiles::skipfile: !exist " + p);
 //         -c, --checksum              skip based on checksum, not mod-time & size
+
+            if (!dst.Exists(p))
+                return false;
+            WriteDebug("syncfiles::skipfile: checksum " + p);
 
             if (checksum)
             {
@@ -448,6 +468,7 @@ namespace net.ninebroadcast
             }
 
 //         -u, --update                skip files that are newer on the receiver
+            WriteDebug("syncfiles::skipfile: update " + p);
 
             if (update)
             {
@@ -455,6 +476,7 @@ namespace net.ninebroadcast
                 if (updatetime < 0 )
                     return true;
             }
+            WriteDebug("syncfiles::skipfile: sizeonly " + p);
 
             if (sizeonly) 
             {
@@ -462,9 +484,20 @@ namespace net.ninebroadcast
                     return true;
             } 
 
-            long timediff = src.GetModificationTime(p).CompareTo(dst.GetModificationTime(p));
+            WriteDebug("syncfiles::skipfile: length and time " + p);
+
+
+            DateTime stime = src.GetModificationTime(p);
+            DateTime dtime = dst.GetModificationTime(p);
+
+            long timediff = stime.CompareTo(dtime);
+            WriteDebug(String.Format("syncfiles::skipfile: length: {0} srctime: {1} destime: {2} diff: {3}", src.GetLength(p), stime, dtime, timediff));
+
             if ((src.GetLength(p) == dst.GetLength(p)) && timediff==0)
                 return true;
+
+            WriteDebug("syncfiles::skipfile: false " + p);
+
 
             return false;
         }
@@ -493,18 +526,22 @@ namespace net.ninebroadcast
 
                         // Console.WriteLine("src: {0}",file);
                         WriteVerbose(relpath);
-                        SyncStat srcType = src.GetInfo(sourcetarget);  // relative from src basepath *** this is really really important ***
-						SyncStat dstType = dst.GetInfo(sourcetarget);
+                      //  SyncStat srcType = src.GetInfo(sourcetarget);  // relative from src basepath *** this is really really important ***
+						//SyncStat dstType = dst.GetInfo(sourcetarget);
 
-                        if (srcType.isDir())
+                        if (src.IsDir(relpath))
                         {
-                            WriteDebug(String.Format("MKDIR: {0}",dst.AbsPath(relpath)));
+                            WriteDebug(String.Format("syncfiles::transfer MakeDir: {0}",dst.AbsPath(relpath)));
                             dst.MakeDir(relpath);  // relative to the destination path
+                            CopyMetadata(relpath, src, dst);
+
                         } else {
-                            WriteDebug( String.Format("COPY TO: {0}",dst.AbsPath(relpath)));
+                            WriteDebug( String.Format("syncfiles::transfer skip/copy: {0}",dst.AbsPath(relpath)));
                             //dst.copyfrom(cdir,file,prog);
-							if (!skipfile(src,dst,relpath)) // better name required
+							if (!skipfile(src,dst,relpath)) { // better name required
 	                            copy(relpath,src,dst,prog);
+                                CopyMetadata(relpath, src, dst);
+                            }
                       //      if (progress)
                        //         prog.close();
                         }
@@ -530,7 +567,7 @@ namespace net.ninebroadcast
 
                 foreach (string p in path)
                 {
-                    WriteDebug("source fromsession: " + p);
+                    WriteDebug("syncfiles::ProcessRecord Path[]: " + p);
                     src= SourceIO (fromsession,p);
                     transfer (src,tdst);
                 }
