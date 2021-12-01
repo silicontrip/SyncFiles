@@ -179,20 +179,9 @@ namespace net.ninebroadcast
                 srcio = new RemoteIO(session,sp);
             } else {
                 //expath = LocalIO.ExpandPath(cpath,this.SessionState);
-								WriteDebug("using local IO");
-
+				WriteDebug("using local IO");
                 srcio = new LocalIO(this.SessionState,sp);
             }
-
-            //string abspath = srcio.AbsPath();
-
-			//WriteDebug("source IO abspath: " + abspath);
-
-
-            //string tree = System.IO.Path.GetDirectoryName(abspath);
-            //string leaf = System.IO.Path.GetFileName(abspath);
-
-			//WriteDebug("source IO tree/leaf: " + tree +"|"+leaf);
 
             Collection<string> expandpath = srcio.ExpandPath(""); 
 
@@ -200,18 +189,14 @@ namespace net.ninebroadcast
             {
                 throw new FileNotFoundException(sp);
             }
-			/*
-			 else    // if (expandpath.Length == 1) 
-            {
-                srcio.SetPath(abspath);
-               // src.Add(srcio);
-            } 
-*/
+
             return srcio;
 
         }
 
         // private void copy(IO src,string srcFile, IO dst, string dstFile, ProgressRecord prog)
+
+		// Copies a single file to destination
         private void copy(string filename, IO src, IO dst, ProgressRecord prog)
         {
 
@@ -278,6 +263,8 @@ namespace net.ninebroadcast
                 block++;
             } while (bytesxfered < srcInfo.Length);
 
+			// Set Attributes
+
 			if (prog != null)
 			{
 				prog.RecordType = ProgressRecordType.Completed;
@@ -300,8 +287,11 @@ namespace net.ninebroadcast
 				Source: exist files & directories
 				*/
 
-                // basic rsync options (-a) assumed to always be active
-                // recursive
+
+				// -a archive mode; rlptgoD
+				// recurse, links, permissions, times, group, owner, devices
+                // archive rsync options (-a) assumed to always be active: NOT IMPLEMENTED
+                // recursive (-r implemented by -a)
                 // copy links (maybe difficult for windows, symlinks are privileged)
                 // preserve permissions (attributes & acl) or if implementing -Extended attributes only
                 // preserve times; System.IO.File.GetAttributes(path) FileSystemInfo
@@ -326,6 +316,8 @@ namespace net.ninebroadcast
 
 
 // putting all file matching here
+// files that return false are not shown.
+// different from skipping a file based on checksum/ date/ size
         bool includefile (string file)
         {
             bool include = true;
@@ -334,10 +326,10 @@ namespace net.ninebroadcast
                 include = false;
                 foreach (string m in includeList)
                 {
-							    // string, string, method
+					// string, string, method
 					Match me = Regex.Match(file,m);
 					if (me.Success) { include = true; }
-                            // if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = true; }
+                    // if (LikeOperator.LikeString(file, m, Microsoft.VisualBasic.CompareMethod.Text)) { include = true; }
                 }
             }
 
@@ -378,6 +370,7 @@ namespace net.ninebroadcast
                         // Console.WriteLine("src: {0}",file);
                         WriteVerbose(relpath);
                         SyncStat srcType = src.GetInfo(sourcetarget);  // relative from src basepath *** this is really really important ***
+						SyncStat dstType = dst.GetInfo(sourcetarget);
 
                         if (srcType.isDir())
                         {
@@ -386,7 +379,9 @@ namespace net.ninebroadcast
                         } else {
                             WriteDebug( String.Format("COPY TO: {0}",dst.AbsPath(relpath)));
                             //dst.copyfrom(cdir,file,prog);
-                            copy(relpath,src,dst,prog);
+							if (skipfile(srcType,dstType)) // better name required
+							
+	                            copy(relpath,src,dst,prog);
                       //      if (progress)
                        //         prog.close();
                         }
