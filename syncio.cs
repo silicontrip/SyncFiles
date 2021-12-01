@@ -17,8 +17,8 @@ namespace net.ninebroadcast
 
 		// all paths should be relative to abspath.
 
-		SyncStat GetInfo(string p);
-		void SetInfo(string p, SyncStat f);
+		//SyncStat GetInfo(string p);
+		//void SetInfo(string p, SyncStat f);
 		long GetLength(string lp);
 		DateTime GetModificationTime(string lp);
 		void SetModificationTime(string lp, DateTime dt);
@@ -241,6 +241,8 @@ namespace net.ninebroadcast
 		public void SetAcl(string lp, FileSecurity fa)
 		{
 			string p = this.AbsPath(lp);
+			//
+			System.IO.FileSystem.FileSystemAclExtensions.SetAccessControl()
 			File.SetAccessControl(p,fa);
 		}
 
@@ -248,15 +250,15 @@ namespace net.ninebroadcast
 // might see if I can remove SyncStat entirely
 		public SyncStat GetInfo(string lp)
 		{
-				string p = this.AbsPath(lp);  //read based Combine
+			string p = this.AbsPath(lp);  //read based Combine
 
-				FileAttributes fa = System.IO.File.GetAttributes(p);
+			FileAttributes fa = System.IO.File.GetAttributes(p);
 
-				if ((fa & FileAttributes.Directory) == FileAttributes.Directory)
-					return new SyncStat(new DirectoryInfo(p));
+			if ((fa & FileAttributes.Directory) == FileAttributes.Directory)
+				return new SyncStat(new DirectoryInfo(p));
 
-				//  are there more types?
-				return new SyncStat(new FileInfo(p));
+			//  are there more types?
+			return new SyncStat(new FileInfo(p));
 		}
 
 		public void SetInfo(string lp, SyncStat f)
@@ -613,7 +615,7 @@ namespace net.ninebroadcast
 
 		private FileAttributes getattributes(string lp)
 		{
-			string ap = this.AbsPath(lp);
+			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 			session.Runspace.SessionStateProxy.SetVariable("path",p);
 			string command = "$fa=[io.file]::getattributes($path)";
