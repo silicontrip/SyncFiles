@@ -611,6 +611,20 @@ namespace net.ninebroadcast
 			 return len;
 		}
 
+		private FileAttributes getattributes(string lp)
+		{
+			string ap = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			string command = "$fa=[io.file]::getattributes($path)";
+
+			pipe.Commands.AddScript(command);
+			Collection<PSObject> rv = pipe.Invoke();
+			FileAttributes len = (FileAttributes)(session.Runspace.SessionStateProxy.GetVariable("fa") as Enum);
+ 			pipe.Dispose();
+			return len;
+		}
+
 		public FileAttributes GetAttributes(string lp)
 		{
 			string ap = this.AbsPath(lp);
@@ -623,13 +637,7 @@ namespace net.ninebroadcast
  			pipe.Dispose();
 
 			return (FileAttributes)(session.Runspace.SessionStateProxy.GetVariable("fa") as System.Enum);
-/*
-			if (rv.Count == 1) {
-				PSObject ps = rv[0];
-				return (FileAttributes)(ps.BaseObject as System.Enum);
-			}
-			throw new IOException("Remote GetAttributes Failure");
-			*/
+
 		}
 
 		public void SetAttributes(string lp, FileAttributes fa)
