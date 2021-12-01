@@ -7,6 +7,7 @@ using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Runtime.InteropServices;
 using System.Security;
+using System.Security.AccessControl;
 
 
 namespace net.ninebroadcast
@@ -18,6 +19,16 @@ namespace net.ninebroadcast
 
 		SyncStat GetInfo(string p);
 		void SetInfo(string p, SyncStat f);
+		long GetLength(string lp);
+		DateTime GetModificationTime(string lp);
+		void SetModificationTime(string lp, DateTime dt);
+		FileAttributes GetAttributes(string lp);
+		void SetAttributes(string lp, FileAttributes fa);
+		Boolean Exists(string lp);
+
+		System.Security.AccessControl.FileSecurity GetAcl(string lp);
+		void SetAcl(string lp, FileSecurity fa);
+
 		void SetPath(string b);
 		void Parent();
 
@@ -34,7 +45,7 @@ namespace net.ninebroadcast
 		string GetCwd();
 		string GetRelative(string toPath);
 
-		FileAttributes GetAttributes(string lp);
+
 		bool IsDir();
         bool IsDir(string p);
 
@@ -76,10 +87,11 @@ namespace net.ninebroadcast
 		public string AbsPath(string p) { return Path.Combine(this.abspath,p); }
 		public void Parent() { this.abspath = Path.GetDirectoryName(this.abspath); }
 
+/*
 		public FileAttributes GetAttributes(string p) { 
 			return File.GetAttributes(this.AbsPath(p));
 		}
-
+*/
 		public bool IsDir() { return IsDir(""); }
         public bool IsDir(string p)
         {
@@ -173,7 +185,63 @@ namespace net.ninebroadcast
            // System.IO.Directory.CreateDirectory(apath);
 			System.IO.Directory.CreateDirectory(this.AbsPath(p));
 		}
+		private FileInfo getfileinfo (string lp)
+		{
+			return new FileInfo(this.AbsPath(lp));
+		}
 
+		public DateTime GetModificationTime(string lp)
+		{
+			FileInfo fi = getfileinfo(lp);
+			return fi.LastWriteTimeUtc;
+		}
+
+
+		public void SetModificationTime(string lp, DateTime dt)
+		{
+			FileInfo fi = getfileinfo(lp);
+			fi.LastWriteTimeUtc = dt;
+		}
+
+		public long GetLength(string lp)
+		{
+			FileInfo fi = getfileinfo(lp);
+			return fi.Length;
+		}
+
+		public FileAttributes GetAttributes(string lp)
+		{
+			FileInfo fi = getfileinfo(lp);
+			return fi.Attributes;
+		}
+
+		//void SetAttributes(string lp, FileAttributes fa);
+ 
+		public void SetAttributes(string lp, FileAttributes fa)
+		{
+			FileInfo fi = getfileinfo(lp);
+			fi.Attributes = fa;
+		}
+
+		public Boolean Exists(string lp)
+		{
+			return getfileinfo(lp).Exists;
+		}
+
+
+		public FileSecurity GetAcl(string lp)
+		{
+			string p = this.AbsPath(lp); 
+			return new FileSecurity(p,AccessControlSections.All);
+		}
+		public void SetAcl(string lp, FileSecurity fa)
+		{
+			string p = this.AbsPath(lp);
+			File.SetAccessControl(p,fa);
+		}
+
+
+// might see if I can remove SyncStat entirely
 		public SyncStat GetInfo(string lp)
 		{
 				string p = this.AbsPath(lp);  //read based Combine
@@ -185,7 +253,6 @@ namespace net.ninebroadcast
 
 				//  are there more types?
 				return new SyncStat(new FileInfo(p));
-
 		}
 
 		public void SetInfo(string lp, SyncStat f)
@@ -278,7 +345,7 @@ namespace net.ninebroadcast
 				try {
 					num = fs.Read(b, 0, g_blocksize);  // this sometimes takes a long time to complete. wtf windows?
 					fs.Close();
-				} catch (IOException e) {
+				} catch (IOException) {
 					b = new byte[0]{};
 				}
 
@@ -342,14 +409,12 @@ namespace net.ninebroadcast
 		{
 			Pipeline pipe = this.session.Runspace.CreatePipeline();
 			//pipe.Commands.AddScript("resolve-path ~");
-			pipe.Commands.AddScript("get-location");
+			pipe.Commands.AddScript("$cwd=get-location");
 			Collection<PSObject> rv = pipe.Invoke();
 			pipe.Dispose();
-			foreach (PSObject ps in rv)
-			{
-				return ps.ToString();
-			}
-			throw new System.IO.DirectoryNotFoundException(); 
+
+			return session.Runspace.SessionStateProxy.GetVariable("cwd").ToString();
+
 		}
 
 		public void SetPath(string b) { this.abspath = b; }
@@ -360,47 +425,10 @@ namespace net.ninebroadcast
 
 		//public Collection<String> ReadDir() { return this.ReadDir(""); }
 
-		public FileAttributes GetAttributes(string lp) 
-		{ 
-			string ap = this.AbsPath(lp);
-			string format = @"[io.file]::GetAttributes(""{0}"")";
-
-			string command = string.Format(format, ap);
-			Pipeline pipe = session.Runspace.CreatePipeline();
-			pipe.Commands.AddScript(command);
-			Collection<PSObject> rv = pipe.Invoke();
- 			pipe.Dispose();
-
-			if (rv.Count == 1) {
-				PSObject ps = rv[0];
-				return (FileAttributes)(ps.BaseObject as System.Enum);
-			}
-			return 0;
-		}
 
         public bool IsDir() { return IsDir(""); }
 		public bool IsDir(string p) {
-
-/*
-			string ap = this.AbsPath(p);
-
-			string format = @"(([io.file]::GetAttributes(""{0}"") -bAnd [io.fileattributes]::Directory) -ne 0)";
-
-			string command = string.Format(format, ap);
-			Pipeline pipe = session.Runspace.CreatePipeline();
-			pipe.Commands.AddScript(command);
-			Collection<PSObject> rv = pipe.Invoke();
-
-			bool ret=false;
-			foreach (PSObject ps in rv) { 
-				Console.WriteLine(ps.ToString());
-				ret= (ps.ToString().Equals("True"));
-			   // ret.Add(ps.ToString()); 
-			}
-			pipe.Dispose();
-			*/
 			return ((GetAttributes(p) & FileAttributes.Directory) != 0);
-//			return ret;
 		}
 
 		public string GetRelative(string toPath)
@@ -475,22 +503,18 @@ namespace net.ninebroadcast
 			Collection<PSObject> ol = pipe.Invoke();
 
 			pipe.Dispose();
-			/*
-			if (ol.Count == 1)
-			{
-				//Console.WriteLine(ol[0].GetType)
-				foreach (PSMemberInfo pmi in ol[0].Members)
-					Console.WriteLine("(" + pmi.GetType() + ") " +pmi.Name + " -> "+pmi.Value);
 
-				DirectoryInfo di = (DirectoryInfo)ol[0].BaseObject;
-				return di;
-			}
-			*/
-			// this should never happen
-			// well I give up unwrapping the object for the moment.
-			// until then, this will always happen.
-			// do we even use directory info anyway?
-			//return null;
+		}
+
+		public void Delete(string lp)
+		{
+			string p = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			string cmd = @"[System.IO.File]::Delete($path)";
+			pipe.Commands.AddScript(cmd);
+			Collection<PSObject> res = pipe.Invoke();
+			pipe.Dispose();
 		}
 
 	//	public Collection<string> ExpandPath (string p) { return ExpandPath(p,session); }
@@ -564,6 +588,166 @@ namespace net.ninebroadcast
 			pipe.Commands.AddScript(command);
 			pipe.Invoke();
 			pipe.Dispose();
+
+		}
+
+		public long GetLength(string lp)
+		{
+			string p = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			string command = @"$fa=[IO.FileInfo]::new($path)).Length";
+			pipe.Commands.AddScript(command);
+			Collection<PSObject> rv = pipe.Invoke();
+			long len = (long)(session.Runspace.SessionStateProxy.GetVariable("fa") as ValueType);
+ 			pipe.Dispose();
+			 return len;
+		}
+
+		public FileAttributes GetAttributes(string lp)
+		{
+			string ap = this.AbsPath(lp);
+			string format = @"$fa=[IO.FileInfo]::new(""{0}"")).Attributes";
+
+			string command = string.Format(format, ap);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			pipe.Commands.AddScript(command);
+			Collection<PSObject> rv = pipe.Invoke();
+ 			pipe.Dispose();
+
+			return (FileAttributes)(session.Runspace.SessionStateProxy.GetVariable("fa") as System.Enum);
+/*
+			if (rv.Count == 1) {
+				PSObject ps = rv[0];
+				return (FileAttributes)(ps.BaseObject as System.Enum);
+			}
+			throw new IOException("Remote GetAttributes Failure");
+			*/
+		}
+
+		public void SetAttributes(string lp, FileAttributes fa)
+		{
+			string p = this.AbsPath(lp);
+			//Int32 faval = fa.ToInt32(null);
+			//string command = string.Format(format, ap,faval);
+
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			session.Runspace.SessionStateProxy.SetVariable("attrib",fa);
+
+			string command = @"[IO.FileInfo]::new($path)).Attributes = $attrib";
+
+			pipe.Commands.AddScript(command);
+			Collection<PSObject> rv = pipe.Invoke();
+ 			pipe.Dispose();
+
+/*
+			if (rv.Count == 1) {
+				PSObject ps = rv[0];
+				return (FileAttributes)(ps.BaseObject as System.Enum);
+			}
+			throw new IOException("Remote SetAttributes Failure");
+			*/
+		}
+
+		public Boolean Exists(string lp)
+		{
+			string p = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			string command = @"$fe=[IO.FileInfo]::new($path)).Exists";
+			pipe.Commands.AddScript(command);
+			Collection<PSObject> rv = pipe.Invoke();
+			Boolean exist = (Boolean)(session.Runspace.SessionStateProxy.GetVariable("fe") as ValueType);
+
+ 			pipe.Dispose();
+			return exist;
+		}
+
+		public DateTime GetModificationTime(string lp)
+		{
+
+			string p = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+
+			string command = @"$date=(get-item -force $path).LastWriteTimeUtc"; // Force for hidden files
+			//string command = string.Format(format, p);
+
+			// Console.WriteLine("getinfo: "+ command);
+
+			pipe.Commands.AddScript(command);
+
+			Collection<PSObject> rv = pipe.Invoke();
+			DateTime dt = (DateTime)(session.Runspace.SessionStateProxy.GetVariable("date") as ValueType);
+			pipe.Dispose();
+
+			return dt;
+		}
+
+		public void SetModificationTime(string lp,DateTime dt)
+		{
+
+			string p = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			session.Runspace.SessionStateProxy.SetVariable("date",dt);
+
+			string command = @" (get-item -force $path).LastWriteTimeUtc = $date"; // Force for hidden files
+			//long ti = dt.Ticks
+			//string command = string.Format(format, pdt.Ticks);
+
+			// Console.WriteLine("getinfo: "+ command);
+
+			pipe.Commands.AddScript(command);
+
+			Collection<PSObject> rv = pipe.Invoke();
+			pipe.Dispose();
+
+/*
+			if (rv.Count == 1)
+				return rv as DateTime;
+
+			throw new System.IO.FileLoadException();
+			*/
+		}
+
+		public FileSecurity GetAcl(string lp)
+		{
+
+			string p = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+//
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			string command = @"$acl=[System.Security.AccessControl.FileSecurity]::new($path, AccessControlSections.All)"; 
+
+			pipe.Commands.AddScript(command);
+			FileSecurity fcl = session.Runspace.SessionStateProxy.GetVariable("acl") as FileSecurity;
+			pipe.Dispose();
+
+			return fcl;
+
+		}
+		public void SetAcl(string lp, FileSecurity fa)
+		{
+			string p = this.AbsPath(lp);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+//
+		// like this method better
+			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			session.Runspace.SessionStateProxy.SetVariable("acl",fa);
+			string command = @"[System.IO.File]::SetAccessControl($file, $acl)"; 
+
+			pipe.Commands.AddScript(command);
+
+			Collection<PSObject> rv = pipe.Invoke();
+			pipe.Dispose();
+
+		//	if (rv.Count == 1)
+		//		return rv as FileSecurity;
+
+		//	throw new System.IO.FileLoadException();
 
 		}
 
@@ -668,104 +852,6 @@ namespace net.ninebroadcast
 			pipe.Invoke();
 			pipe.Dispose();
 		}	
-
-// old as in, we no longer use this one.
-		public void OldWriteBlock(string lp, Int64 block, byte[] data)
-		{
-			string p = this.AbsPath(lp);
-			Pipeline pipe = session.Runspace.CreatePipeline();
-
-			string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::OpenOrCreate)";
-			string command = string.Format(format, p);
-
-			pipe.Commands.AddScript(command);
-
-			Int64 bloffset = block * g_blocksize;
-
-			string format2 = "$r=$fs.Seek({0},[System.IO.SeekOrigin]::Begin)";
-			string command2 = string.Format(format2, bloffset);
-			pipe.Commands.AddScript(command2);
-
-			string b64data = System.Convert.ToBase64String(data);
-			string format3 = "$b=[Convert]::FromBase64String(\"{0}\")";
-			string command3 = string.Format(format3, b64data);
-			pipe.Commands.AddScript(command3);
-
-			// pipe.Commands.AddScript("$b=[System.byte[]]::new({0})");
-			pipe.Commands.AddScript("$fs.write($b,0,$b.Length)");
-
-			if (data.Length != g_blocksize)
-			{
-				string format4 = "$fs.SetLength(\"{0}\")";
-				string command4 = string.Format(format4, bloffset + data.Length);
-				pipe.Commands.AddScript(command4);
-			}
-			pipe.Commands.AddScript("$fs.close()");
-			//Collection<PSObject> bytesres = pipe.Invoke();
-			//pipe.Commands.AddScript("$b");
-			// Collection<PSObject> res = 
-			pipe.Invoke();
-			pipe.Dispose();
-		}
-
-		public void Delete(string lp)
-		{
-			string p = this.AbsPath(lp);
-			Pipeline pipe = session.Runspace.CreatePipeline();
-
-			string format = "remove-item -force \"{0}\""; // Force for hidden files
-			string command = string.Format(format, p);
-			pipe.Commands.AddScript(command);
-
-			pipe.Invoke();
-			pipe.Dispose();
-		}
-
-// old, no longer used?
-		public string OldHashBlock(string lp, Int64 block)
-		{
-			string p = this.AbsPath(lp);
-			string format = "$fs=[System.IO.file]::Open(\"{0}\",[System.IO.FileMode]::Open)";
-			string command = string.Format(format, p);
-			Pipeline pipe = session.Runspace.CreatePipeline();
-
-			pipe.Commands.AddScript(command);
-
-			Int64 bloffset = block * g_blocksize;
-
-			string format2 = "$r=$fs.Seek({0},[System.IO.SeekOrigin]::Begin)";
-			string command2 = string.Format(format2, bloffset);
-			pipe.Commands.AddScript(command2);
-
-			string format3 = "$b=[System.byte[]]::new({0})";
-			string command3 = string.Format(format3, g_blocksize);
-			pipe.Commands.AddScript(command3);
-
-			string format5 = "$r=$fs.read($b,0,{0})";
-			string command5 = string.Format(format5, g_blocksize);
-			pipe.Commands.AddScript(command5);
-
-			pipe.Commands.AddScript("if ($r -eq 0) { throw \"EndOfFile\"} ");
-
-
-			pipe.Commands.AddScript("$sha=[system.security.cryptography.sha256]::Create()");
-			pipe.Commands.AddScript("$h=$sha.computehash($b,0,$r)");
-			pipe.Commands.AddScript("$sha.dispose()");
-			pipe.Commands.AddScript("$fs.close()");
-			pipe.Commands.AddScript("$h");
-
-			Collection<PSObject> res = pipe.Invoke();
-			string result = "";
-
-			foreach (PSObject ps in res)
-			{
-				byte bytes = (byte)ps.BaseObject;
-				result += bytes.ToString("x2");
-			}
-			pipe.Dispose();
-
-			return result;
-		}
 
 		public string HashBlock(string lp, Int64 block)
 		{

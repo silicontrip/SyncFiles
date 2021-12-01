@@ -54,6 +54,70 @@ namespace net.ninebroadcast
         private Boolean checksum;
 
         [Parameter()]
+        public SwitchParameter Update
+        {
+            get { return update; }
+            set { update = value; }
+        }
+        private Boolean update;
+
+        [Parameter()]
+        public SwitchParameter SizeOnly
+        {
+            get { return sizeonly; }
+            set { sizeonly = value; }
+        }
+        private Boolean sizeonly;
+
+        [Parameter()]
+        public SwitchParameter Whole
+        {
+            get { return whole; }
+            set { whole = value; }
+        }
+        private Boolean whole;
+
+       [Parameter()]
+        public SwitchParameter Times
+        {
+            get { return times; }
+            set { times = value; }
+        }
+        private Boolean times;
+
+       [Parameter()]
+        public SwitchParameter Permissions
+        {
+            get { return permissions; }
+            set { permissions = value; }
+        }
+        private Boolean permissions;
+
+       [Parameter()]
+        public SwitchParameter Acls
+        {
+            get { return acls; }
+            set { acls = value; }
+        }
+        private Boolean acls;
+
+      [Parameter()]
+        public SwitchParameter Owner
+        {
+            get { return owner; }
+            set { owner = value; }
+        }
+        private Boolean owner;
+
+      [Parameter()]
+        public SwitchParameter Group
+        {
+            get { return group; }
+            set { group = value; }
+        }
+        private Boolean group;
+
+        [Parameter()]
         public SwitchParameter Progress
         {
             get { return progress; }
@@ -204,37 +268,31 @@ namespace net.ninebroadcast
             Int32 block = 0;
             Byte[] b;
 
-            SyncStat srcInfo = src.GetInfo(filename);  // rel
-            SyncStat dstInfo;
-            try
-            {
-            	dstInfo = dst.GetInfo(filename); 
-            } catch {
-				dstInfo = new SyncStat();
-            }
-
-            // do some clever compare
-            // src date newer dst date
-            // src size != dst size
-            // src chksum != dst chksum
+            long srcLength = src.GetLength(filename);
 
             do
             {
                 WriteDebug("Do Block copy: " + block);
                 bool copyBlock = true;
-                if (dstInfo.Exists)
+                if (!whole) 
                 {
-                    // doesn't look very clever to me
-                    string srcHash = src.HashBlock(filename, block);  // we should worry if this throws an error
-                    try { 
-                        string dstHash = dst.HashBlock(filename, block); 
-                        if (srcHash.Equals(dstHash)) copyBlock = false;
+                    if (dst.Exists(filename))
+                    {
+                        // I don't see what's so special about that
+                        // -- I've got a degree in computer science, that's what.
+                        // yeah ok. 
 
-						WriteDebug(String.Format("src hash: {0}",srcHash));
-						WriteDebug(String.Format("dst hash: {0}",dstHash));
+                        string srcHash = src.HashBlock(filename, block);  // we should worry if this throws an error
+                        try { 
+                            string dstHash = dst.HashBlock(filename, block); 
+                            if (srcHash.Equals(dstHash)) copyBlock = false;
 
-                    } catch {
-                        copyBlock = true;
+                            WriteDebug(String.Format("src hash: {0}",srcHash));
+                            WriteDebug(String.Format("dst hash: {0}",dstHash));
+
+                        } catch {
+                            copyBlock = true;
+                        }
                     }
                 }
                 WriteDebug("will copy block: " + copyBlock);
@@ -244,8 +302,8 @@ namespace net.ninebroadcast
                     if (!whatif)
                         dst.WriteBlock(filename, block, b);
                 }
-                if (bytesxfered + LocalIO.g_blocksize > srcInfo.Length)
-                    bytesxfered = srcInfo.Length;
+                if (bytesxfered + LocalIO.g_blocksize > srcLength)
+                    bytesxfered = srcLength;
                 else
                     bytesxfered += LocalIO.g_blocksize;
 
@@ -256,14 +314,32 @@ namespace net.ninebroadcast
                     // Console.WriteLine(String.Format("{0} {1}", bytesxfered, srcInfo.Length));
                     // add b/s and eta
 
-                    if (srcInfo.Length != 0)
-                        prog.PercentComplete = (int)(100 * bytesxfered / srcInfo.Length);
+                    if (srcLength != 0)
+                        prog.PercentComplete = (int)(100 * bytesxfered / srcLength);
+                    else 
+                        prog.PercentComplete = 100;
+
                     WriteProgress(prog);
                 }
                 block++;
-            } while (bytesxfered < srcInfo.Length);
+            } while (bytesxfered < srcLength);
 
 			// Set Attributes
+
+            if (times)
+                dst.SetModificationTime(filename,src.GetModificationTime(filename));
+
+            if (permissions)
+                dst.SetAttributes(filename,src.GetAttributes(filename));
+
+            if (acls)
+                dst.SetAcl(filename,src.GetAcl(filename)); // stuff
+
+            if (owner)
+                ; // stuff
+
+            if (group)
+                ;
 
 			if (prog != null)
 			{
@@ -299,16 +375,28 @@ namespace net.ninebroadcast
                 // preserve owner 
                 // Devices (N/A)
 
+                //    -H, --hard-links            preserve hard links
+                //    -p, --perms                 preserve permissions
+                //    -E, --executability         preserve executability
+                //    -A, --acls                  preserve ACLs (implies -p)
+                //    -X, --xattrs                preserve extended attributes
+                //    -o, --owner                 preserve owner (super-user only)
+                //    -g, --group                 preserve group
+                //        --devices               preserve device files (super-user only)
+                //        --specials              preserve special files
+                //    -t, --times                 preserve modification times
+
                 // TODO: (these are possible options that could be implemented relatively easily)
                 // going to put future implementable options here
 
-                // -Checksum copy based on checksum not date/size
-                // -Update skip newer files in destination
+                
+                // -Checksum copy based on checksum not date/size IMPLEMENTED
+                // -Update skip newer files in destination IMPLEMENTED
                 // -inplace (normal operation is to write to temporary file and rename)
-                // -WhatIf (aka dry run)
-                // -Whole don't perform block check
+                // -WhatIf (aka dry run) IMPLEMENTED
+                // -Whole don't perform block check IMPLEMENTED
                 // - don't cross reparse points
-                // checksum block size
+                // checksum block size  -> syncio
                 // -Delete (delete files that only exist in the destination)
                 // -minSize / -maxsize
                 // -compress (maybe)
@@ -318,7 +406,7 @@ namespace net.ninebroadcast
 // putting all file matching here
 // files that return false are not shown.
 // different from skipping a file based on checksum/ date/ size
-        bool includefile (string file)
+        Boolean includefile(string file)
         {
             bool include = true;
             if (includeList != null)
@@ -343,6 +431,42 @@ namespace net.ninebroadcast
                 }
             }
             return include;
+        }
+
+        // copy skipping here (file name still shows in verbose)
+
+        Boolean skipfile (IO src, IO dst, string p)
+        {
+//         -c, --checksum              skip based on checksum, not mod-time & size
+
+            if (checksum)
+            {
+                string shash = src.HashTotal(p);
+                string dhash = dst.HashTotal(p);
+                if (dhash == shash)
+                    return true;
+            }
+
+//         -u, --update                skip files that are newer on the receiver
+
+            if (update)
+            {
+                long updatetime = src.GetModificationTime(p).CompareTo(dst.GetModificationTime(p));
+                if (updatetime < 0 )
+                    return true;
+            }
+
+            if (sizeonly) 
+            {
+                if (src.GetLength(p) == dst.GetLength(p))
+                    return true;
+            } 
+
+            long timediff = src.GetModificationTime(p).CompareTo(dst.GetModificationTime(p));
+            if ((src.GetLength(p) == dst.GetLength(p)) && timediff==0)
+                return true;
+
+            return false;
         }
 
         void transfer (IO src, IO dst)
@@ -379,8 +503,7 @@ namespace net.ninebroadcast
                         } else {
                             WriteDebug( String.Format("COPY TO: {0}",dst.AbsPath(relpath)));
                             //dst.copyfrom(cdir,file,prog);
-							if (skipfile(srcType,dstType)) // better name required
-							
+							if (!skipfile(src,dst,relpath)) // better name required
 	                            copy(relpath,src,dst,prog);
                       //      if (progress)
                        //         prog.close();
