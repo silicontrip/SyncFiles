@@ -2,13 +2,13 @@
 Powershell cmdlet similar to rsync
 
     NAME
-        Sync-ChildItems
+        Sync-ChildItem
         
     SYNOPSIS
         Synchronises items from one location to another.
 
     SYNTAX
-        Sync-ChildItems [-Path] <String> [-Target] <String> [-Checksum] [-Progress] [-ToSession <PSSession>] [-FromSession <PSSession>] [-Exclude <String[]>] [-Include <String[]>] [-verbose] [-debug]
+        Sync-ChildItem [-Path] <String> [-Target] <String> [-Checksum] [-Progress] [-ToSession <PSSession>] [-FromSession <PSSession>] [-Exclude <String[]>] [-Include <String[]>] [-verbose] [-debug]
 
     DESCRIPTION
         The Sync-ChildItems cmdlet copies an item or container from one location to another in the FileSystem provider

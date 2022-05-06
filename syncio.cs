@@ -245,14 +245,10 @@ namespace net.ninebroadcast
 		public void SetAcl(string lp, FileSecurity fa)
 		{
 			string p = this.AbsPath(lp);
-<<<<<<< HEAD
+			//System.IO.FileSystem.FileSystemAclExtensions.SetAccessControl()
+
 			if (fa != null)
 				File.SetAccessControl(p,fa);
-=======
-			//
-			System.IO.FileSystem.FileSystemAclExtensions.SetAccessControl()
-			File.SetAccessControl(p,fa);
->>>>>>> e59954aabec2a6e66f3cabe71effb2a6cfe91fc0
 		}
 
 
