@@ -267,21 +267,38 @@ namespace net.ninebroadcast
             if (times)
             {
                 DateTime smod = src.GetModificationTime(filename);
-                WriteDebug ("syncfiles::copy times mod time: " + smod);
+                WriteDebug ("syncfiles::copyMetaData times mod time: " + smod);
                 dst.SetModificationTime(filename,smod);
             }
 
+
             if (permissions)
+            {
+                WriteDebug("syncfiles::CopyMetadata permissions/attributes");
+
                 dst.SetAttributes(filename,src.GetAttributes(filename));
+            }
 
             if (acls)
-                dst.SetAcl(filename,src.GetAcl(filename)); // stuff
+            {
+                // Admin privs are needed to read ACLS... really MS? just to read?
+                WriteDebug("syncfiles::CopyMetadata acl");
+                dst.SetAcl(filename,src.GetAcl(filename)); // stuff 
 
+                //FileSecurity srcacl = src.GetAcl(filename);
+                //dst.SetAcl(filename,srcacl); // stuff 
+                // throw If error. caught in transfer loop == skip file
+            }
             if (owner)
-                ; // stuff
+            {
+                WriteDebug("syncfiles::CopyMetadata owner");
 
+                ; // stuff
+            }
             if (group)
+            {
                 ;
+            }
         }
 
 		// Copies a single file to destination
@@ -308,8 +325,9 @@ namespace net.ninebroadcast
                         // -- I've got a degree in computer science, that's what.
                         // yeah ok. 
 
-                        string srcHash = src.HashBlock(filename, block);  // we should worry if this throws an error
-                        try { 
+                        try {
+
+                            string srcHash = src.HashBlock(filename, block);  // we should worry if this throws an error, it did throw an error.
                             string dstHash = dst.HashBlock(filename, block); 
                             if (srcHash.Equals(dstHash)) copyBlock = false;
 
@@ -323,7 +341,9 @@ namespace net.ninebroadcast
                 }
                 WriteDebug("SyncFiles::copy copyBlock: " + copyBlock);
                 if (copyBlock)
-                {
+                {   
+                    WriteDebug("SyncFiles::copy ReadBlock: " + filename + ", "+block);
+
                     b = src.ReadBlock(filename, block); // throw error report file failure
                     if (!whatif)
                         dst.WriteBlock(filename, block, b);
@@ -454,7 +474,7 @@ namespace net.ninebroadcast
         {
             WriteDebug("syncfiles::skipfile: !exist " + p);
 //         -c, --checksum              skip based on checksum, not mod-time & size
-
+            // full path not relative
             if (!dst.Exists(p))
                 return false;
             WriteDebug("syncfiles::skipfile: checksum " + p);
@@ -504,6 +524,7 @@ namespace net.ninebroadcast
 
         void transfer (IO src, IO dst)
         {
+            WriteDebug("syncfiles::transfer starting");
             string apath = src.AbsPath();
             // string rel = src.GetDirectoryName();
 			ProgressRecord prog = null;
@@ -512,14 +533,32 @@ namespace net.ninebroadcast
 			src.Parent();
             foreach (string spath in expath)
             {
+                WriteDebug("syncfiles::transfer path: " +spath);
+
+                string srpath = src.GetRelative(spath);
+
+                if (src.IsDir(srpath))
+                {
+                    WriteDebug(String.Format("syncfiles::transfer transfer path MakeDir: {0}",dst.AbsPath(srpath)));
+                    dst.MakeDir(srpath);  // relative to the destination path
+                    try {
+                        CopyMetadata(srpath, src, dst);
+                    } catch (Exception e) {
+                        WriteWarning("Failed to Set attributes: " + srpath);
+                    }
+                } 
+
                 Collection<string> allpath = src.ReadDir(spath);
                 foreach (string sourcetarget in allpath)
                 {
+                    WriteDebug("syncfiles::transfer sourcetarget: " +sourcetarget);
+
                     // copylist.Add(sourcetarget);
                     if (includefile(sourcetarget))
                     {
                         Count++;
                         string relpath  = src.GetRelative(sourcetarget);
+
 
                         if (progress)
                             prog = new ProgressRecord(1, relpath, "Copying");
@@ -529,6 +568,11 @@ namespace net.ninebroadcast
                       //  SyncStat srcType = src.GetInfo(sourcetarget);  // relative from src basepath *** this is really really important ***
 						//SyncStat dstType = dst.GetInfo(sourcetarget);
 
+                        WriteDebug("syncfiles::transfer isDir  " + src.AbsPath(relpath));
+
+                       // long l = src.GetLength(relpath);
+                        FileAttributes f = src.GetAttributes(relpath);
+
                         if (src.IsDir(relpath))
                         {
                             WriteDebug(String.Format("syncfiles::transfer MakeDir: {0}",dst.AbsPath(relpath)));
@@ -536,11 +580,23 @@ namespace net.ninebroadcast
                             CopyMetadata(relpath, src, dst);
 
                         } else {
+
                             WriteDebug( String.Format("syncfiles::transfer skip/copy: {0}",dst.AbsPath(relpath)));
                             //dst.copyfrom(cdir,file,prog);
 							if (!skipfile(src,dst,relpath)) { // better name required
-	                            copy(relpath,src,dst,prog);
-                                CopyMetadata(relpath, src, dst);
+                                WriteDebug(String.Format("syncfiles::transfer will Copy file: {0}",dst));
+
+                                try {
+
+                        /* is this the only one, only one, only one, let me go */
+	                                copy(relpath,src,dst,prog);
+                                    CopyMetadata(relpath, src, dst);
+                                } catch (IOException e) {
+                                    ErrorRecord er = new ErrorRecord(e,"Transfer",ErrorCategory.OpenError,null);
+                                    WriteError (er);
+                                    // increase error counter
+
+                                }
                             }
                       //      if (progress)
                        //         prog.close();

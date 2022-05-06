@@ -229,7 +229,11 @@ namespace net.ninebroadcast
 
 		public Boolean Exists(string lp)
 		{
-			return getfileinfo(lp).Exists;
+			string p = this.AbsPath(lp);
+
+			return System.IO.File.Exists(p);
+			// why did I do this?
+			//return getfileinfo(lp).Exists;
 		}
 
 		public FileSecurity GetAcl(string lp)
@@ -241,9 +245,10 @@ namespace net.ninebroadcast
 		public void SetAcl(string lp, FileSecurity fa)
 		{
 			string p = this.AbsPath(lp);
-			//
-			System.IO.FileSystem.FileSystemAclExtensions.SetAccessControl()
-			File.SetAccessControl(p,fa);
+			//System.IO.FileSystem.FileSystemAclExtensions.SetAccessControl()
+
+			if (fa != null)
+				File.SetAccessControl(p,fa);
 		}
 
 
@@ -394,16 +399,20 @@ namespace net.ninebroadcast
 		readonly PSSession session;
 		private string abspath;
 
+		private ConvertThroughString converter;
+
 		public RemoteIO(PSSession s)
 		{
 			this.session = s;
-			this.SetPath(GetCwd()); 
+			this.converter = new ConvertThroughString();
 
+			this.SetPath(GetCwd()); 
 		}
 
 		public RemoteIO(PSSession ss, string pp)
 		{
 			this.session=ss; 
+			this.converter = new ConvertThroughString();
 
 			this.SetPath(
 				Path.Combine(GetCwd(),pp) // pp can be relative or absolute
@@ -437,7 +446,8 @@ namespace net.ninebroadcast
 
 			//string p = this.AbsPath(lp);
 			//FileAttributes fa = File.GetAttributes(p);
-			return ((GetAttributes(lp) & FileAttributes.Directory) != 0);
+			FileAttributes fa = GetAttributes(lp);
+			return ((fa & FileAttributes.Directory) != 0);
 		}
 
 		public string GetRelative(string toPath)
@@ -605,19 +615,26 @@ namespace net.ninebroadcast
 			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 			session.Runspace.SessionStateProxy.SetVariable("path",p);
-			string command = @"$fa=[IO.FileInfo]::new($path)).Length";
+			string command = @"(New-Object -TypeName System.IO.FileInfo -ArgumentList $path).Length";
 			pipe.Commands.AddScript(command);
 			Collection<PSObject> rv = pipe.Invoke();
-			long len = (long)(session.Runspace.SessionStateProxy.GetVariable("fa") as ValueType);
+
+			long len=0;
+			foreach (PSObject ps in rv)
+			{
+				//Console.WriteLine("this is a journey into sound.");
+				len = (long)converter.ConvertFrom(ps,len.GetType(),null,false);
+			}
+			// long len = (long)(session.Runspace.SessionStateProxy.GetVariable("fa") as ValueType);
  			pipe.Dispose();
-			 return len;
+			return len;
 		}
 
-		private FileAttributes getattributes(string lp)
+/*		private FileAttributes getattributes(string lp)
 		{
 			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
-			session.Runspace.SessionStateProxy.SetVariable("path",p);
+			session.Runspace.SessionStateProxy.SetVariable("path",lp);
 			string command = "$fa=[io.file]::getattributes($path)";
 
 			pipe.Commands.AddScript(command);
@@ -626,19 +643,57 @@ namespace net.ninebroadcast
  			pipe.Dispose();
 			return len;
 		}
+*/
 
 		public FileAttributes GetAttributes(string lp)
 		{
 			string ap = this.AbsPath(lp);
-			string format = @"$fa=[IO.FileInfo]::new(""{0}"")).Attributes";
 
-			string command = string.Format(format, ap);
+			// string command = string.Format(format, ap);
+
 			Pipeline pipe = session.Runspace.CreatePipeline();
-			pipe.Commands.AddScript(command);
+			if ( pipe is null) 
+				throw new ArgumentException ("pipe null");
+			pipe.Runspace.SessionStateProxy.SetVariable("path",ap);
+			string format = @"(New-Object -TypeName System.IO.FileInfo -ArgumentList $path).Attributes";
+
+			pipe.Commands.AddScript(format);
 			Collection<PSObject> rv = pipe.Invoke();
+
+			// throw new ArgumentException ("Get Variable");
+
+
+
+			FileAttributes ga = 0;
+			foreach (PSObject ps in rv)
+			{
+				ga = (FileAttributes)converter.ConvertFrom(ps,ga.GetType(),null,false);
+			}
+
+			Runspace rs = pipe.Runspace;
+		//	if ( rs is null) 
+		//		throw new ArgumentException ("Runspace null");
+
+			SessionStateProxy ssp = rs.SessionStateProxy;
+		//	if (ssp is null) 
+		//		throw new ArgumentException ("SessionStateProxy null");			
+
+/*
+			Object obj = ssp.GetVariable("fa");
+			if ( obj is null) 
+				throw new ArgumentException ("GetVariable null");	
+
+			throw new ArgumentException (" get variable: " + (obj.GetType() + " / " + obj));
+
+			Enum en = obj as System.Enum;
+
+			FileAttributes ga=(FileAttributes)en;
+				*/
+			//throw new ArgumentException ("pipe dispose");
+
  			pipe.Dispose();
 
-			return (FileAttributes)(session.Runspace.SessionStateProxy.GetVariable("fa") as System.Enum);
+			return (FileAttributes)ga;
 
 		}
 
@@ -652,7 +707,7 @@ namespace net.ninebroadcast
 			session.Runspace.SessionStateProxy.SetVariable("path",p);
 			session.Runspace.SessionStateProxy.SetVariable("attrib",fa);
 
-			string command = @"[IO.FileInfo]::new($path)).Attributes = $attrib";
+			string command = @"(New-Object -TypeName System.IO.FileInfo -ArgumentList $path).Attributes = $attrib";
 
 			pipe.Commands.AddScript(command);
 			Collection<PSObject> rv = pipe.Invoke();
@@ -672,7 +727,7 @@ namespace net.ninebroadcast
 			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 			session.Runspace.SessionStateProxy.SetVariable("path",p);
-			string command = @"$fe=[IO.FileInfo]::new($path)).Exists";
+			string command = @"$fe=(New-Object -TypeName System.IO.FileInfo -ArgumentList $path).Exists";
 			pipe.Commands.AddScript(command);
 			Collection<PSObject> rv = pipe.Invoke();
 			Boolean exist = (Boolean)(session.Runspace.SessionStateProxy.GetVariable("fe") as ValueType);
@@ -732,14 +787,17 @@ namespace net.ninebroadcast
 
 		public FileSecurity GetAcl(string lp)
 		{
+		// Should be able to use SDDL string for Absolute ACLing
 
 			string p = this.AbsPath(lp);
 			Pipeline pipe = session.Runspace.CreatePipeline();
 //
 			session.Runspace.SessionStateProxy.SetVariable("path",p);
-			string command = @"$acl=[System.Security.AccessControl.FileSecurity]::new($path, AccessControlSections.All)"; 
+			string command = @"$acl=New-Object -TypeName System.Security.AccessControl.FileSecurity -ArgumentList $path,""All"""; 
 
 			pipe.Commands.AddScript(command);
+			Collection<PSObject> rv = pipe.Invoke();
+
 			FileSecurity fcl = session.Runspace.SessionStateProxy.GetVariable("acl") as FileSecurity;
 			pipe.Dispose();
 
@@ -808,23 +866,31 @@ namespace net.ninebroadcast
 			Int64 bloffset = block * g_blocksize;
 
 			string f = @"
-				$fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)
-				$fs.Seek({1},[System.IO.SeekOrigin]::Begin)
-				$b= New-Object System.byte[] {2}
-				$r=$fs.read($b,0,{2})
-				[System.Array]::Resize([ref]$b,$r)
-				$bs=[Convert]::ToBase64String($b)
+				$fs=[System.IO.file]::Open($fullpath,[System.IO.FileMode]::Open,[System.IO.FileAccess]::Read,[System.IO.FileShare]::ReadWrite)
+				$fs.Seek($offset,[System.IO.SeekOrigin]::Begin) | out-null
+				$b= New-Object System.byte[] -argumentlist $bsize
+				$r=$fs.read($b,0,$bsize)
+				$bb=New-Object System.byte[] -argumentList $r
+				[System.Array]::copy($b,$bb,$r)
+				$bs=[Convert]::ToBase64String($bb)
 				$fs.close()
 				$bs
 			";
 
+			Pipeline pipe = session.Runspace.CreatePipeline();
+
+			pipe.Runspace.SessionStateProxy.SetVariable("fullpath",p);
+			pipe.Runspace.SessionStateProxy.SetVariable("offset",bloffset);
+			pipe.Runspace.SessionStateProxy.SetVariable("bsize",g_blocksize);
+
+/*
 			string command = string.Format(f,
 				p,
 				bloffset,
 				g_blocksize);
+*/
 
-			Pipeline pipe = session.Runspace.CreatePipeline();
-			pipe.Commands.AddScript(command);
+			pipe.Commands.AddScript(f);
 
 			Collection<PSObject> res = pipe.Invoke();
 			foreach (PSObject ps in res)
@@ -875,28 +941,33 @@ namespace net.ninebroadcast
 			string p = this.AbsPath(lp);
 			// p, 
 			string format = @"
-			$fs=[System.IO.file]::Open(""{0}"",[System.IO.FileMode]::Open)
-			$r=$fs.Seek({1},[System.IO.SeekOrigin]::Begin)
-			$b=[System.byte[]]::new({2})
-			$r=$fs.read($b,0,{2})
+			$fs=[System.IO.file]::Open($path,[System.IO.FileMode]::Open)
+			$r=$fs.Seek($offset,[System.IO.SeekOrigin]::Begin)
+			$b=New-Object -typename System.byte[] -ArgumentList $blocksize
+			$r=$fs.read($b,0,$blocksize)
 			if ($r -eq 0) {{ throw ""EndOfFile"" }}
 			$sha=[system.security.cryptography.sha256]::Create()
 			$h=$sha.computehash($b,0,$r)
-			$sha.dispose()
 			$fs.close()
 			$h
 			";
 
 			Int64 bloffset = block * g_blocksize;
 
+/*
 			string command = string.Format(format, 
 				p,
 				bloffset,
 				g_blocksize
 			);
-			Pipeline pipe = session.Runspace.CreatePipeline();
+*/
 
-			pipe.Commands.AddScript(command);
+			Pipeline pipe = session.Runspace.CreatePipeline();
+			pipe.Runspace.SessionStateProxy.SetVariable("path",p);
+			pipe.Runspace.SessionStateProxy.SetVariable("offset",bloffset);
+			pipe.Runspace.SessionStateProxy.SetVariable("blocksize",g_blocksize);
+
+			pipe.Commands.AddScript(format);
 
 			Collection<PSObject> res = pipe.Invoke();
 			string result = "";
