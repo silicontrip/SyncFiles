@@ -247,8 +247,12 @@ namespace net.ninebroadcast
 			string p = this.AbsPath(lp);
 			//System.IO.FileSystem.FileSystemAclExtensions.SetAccessControl()
 
+
 			if (fa != null)
-				File.SetAccessControl(p,fa);
+			{
+				FileInfo fi = new FileInfo(p);
+				fi.SetAccessControl(fa);
+			}
 		}
 
 
